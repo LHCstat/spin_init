@@ -36,6 +36,86 @@ def init_reaction_mdata_arginfo() -> Argument:
     return general_mdata_arginfo("init_reaction_mdata", ("reaxff", "build", "fp"))
 
 
+def spin_init_mdata_arginfo() -> Argument:
+    """Generate arginfo for ``dpgen spin_init`` machine parameters."""
+    return general_mdata_arginfo("spin_init_mdata", ("fp",))
+
+
+def spin_init_jdata_arginfo() -> Argument:
+    """Generate arginfo for ``dpgen spin_init`` parameters."""
+    return Argument(
+        "spin_init_jdata",
+        dict,
+        [
+            Argument(
+                "stages",
+                list[int],
+                optional=False,
+                doc="Stages: 1 perturb, 2 create/run AIMD, 3 collect XDATCAR.",
+            ),
+            Argument(
+                "from_poscar_path",
+                str,
+                optional=False,
+                doc="Path to the initial VASP POSCAR.",
+            ),
+            Argument(
+                "out_dir",
+                str,
+                optional=True,
+                default=".",
+                doc="Output root used exactly as supplied, without a suffix.",
+            ),
+            Argument(
+                "super_cell",
+                list[int],
+                optional=False,
+                doc="Three positive supercell multipliers.",
+            ),
+            Argument(
+                "scale",
+                list[float],
+                optional=False,
+                doc="Positive isotropic cell scale factors.",
+            ),
+            Argument(
+                "pert_numb",
+                int,
+                optional=False,
+                doc="Number of perturbed structures per scale, excluding 000000.",
+            ),
+            Argument(
+                "pert_box",
+                float,
+                optional=False,
+                doc="Maximum box perturbation passed to the init_bulk algorithm.",
+            ),
+            Argument(
+                "pert_atom",
+                float,
+                optional=False,
+                doc="Maximum atomic displacement in angstrom.",
+            ),
+            Argument(
+                "md_incar", str, optional=False, doc="Path to the VASP AIMD INCAR."
+            ),
+            Argument(
+                "md_nstep",
+                int,
+                optional=False,
+                doc="Expected AIMD steps; NSW in md_incar takes precedence.",
+            ),
+            Argument(
+                "potcars",
+                list[str],
+                optional=False,
+                doc="POTCAR fragments concatenated in this order.",
+            ),
+        ],
+        doc="Generate VASP AIMD snapshots for spin initialization.",
+    )
+
+
 def init_bulk_vasp_args() -> list[Argument]:
     return []
 

@@ -10,6 +10,7 @@ from dpgen.auto_test.run import gen_test
 from dpgen.collect.collect import gen_collect
 from dpgen.data.gen import gen_init_bulk
 from dpgen.data.reaction import gen_init_reaction
+from dpgen.data.spin_init import gen_spin_init
 from dpgen.data.surf import gen_init_surf
 from dpgen.database.run import db_run
 from dpgen.generator.run import gen_run
@@ -77,6 +78,22 @@ def main_parser() -> argparse.ArgumentParser:
         help="machine file, json/yaml format",
     )
     parser_init_bulk.set_defaults(func=gen_init_bulk)
+
+    # spin initialization from an existing POSCAR
+    parser_spin_init = subparsers.add_parser(
+        "spin_init", help="Generating VASP AIMD snapshots for spin initialization."
+    )
+    parser_spin_init.add_argument(
+        "PARAM", type=str, help="parameter file, json/yaml format"
+    )
+    parser_spin_init.add_argument(
+        "MACHINE",
+        type=str,
+        default=None,
+        nargs="?",
+        help="machine file, json/yaml format",
+    )
+    parser_spin_init.set_defaults(func=gen_spin_init)
 
     parser_auto_gen_param = subparsers.add_parser(
         "auto_gen_param", help="auto gen param.json"

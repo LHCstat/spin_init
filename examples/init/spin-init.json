@@ -1,0 +1,25 @@
+{
+    "stages": [
+        1,
+        2,
+        3
+    ],
+    "from_poscar_path": "./POSCAR",
+    "out_dir": ".",
+    "super_cell": [
+        1,
+        1,
+        1
+    ],
+    "scale": [
+        1.0
+    ],
+    "pert_numb": 1,
+    "pert_box": 0.03,
+    "pert_atom": 0.01,
+    "md_incar": "./INCAR.md",
+    "md_nstep": 3,
+    "potcars": [
+        "./POTCAR"
+    ]
+}

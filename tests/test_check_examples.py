@@ -10,6 +10,7 @@ from dpgen.data.arginfo import (
     init_bulk_jdata_arginfo,
     init_reaction_jdata_arginfo,
     init_surf_jdata_arginfo,
+    spin_init_jdata_arginfo,
 )
 from dpgen.generator.arginfo import run_jdata_arginfo, run_mdata_arginfo
 from dpgen.simplify.arginfo import simplify_jdata_arginfo, simplify_mdata_arginfo
@@ -18,6 +19,7 @@ from dpgen.util import normalize
 init_bulk_jdata = init_bulk_jdata_arginfo()
 init_surf_jdata = init_surf_jdata_arginfo()
 init_reaction_jdata = init_reaction_jdata_arginfo()
+spin_init_jdata = spin_init_jdata_arginfo()
 simplify_jdata = simplify_jdata_arginfo()
 simplify_mdata = simplify_mdata_arginfo()
 run_jdata = run_jdata_arginfo()
@@ -30,6 +32,7 @@ p_examples = Path(__file__).parent.parent / "examples"
 #   tuple of example list
 input_files = (
     (init_bulk_jdata, p_examples / "init" / "ch4.json"),
+    (spin_init_jdata, p_examples / "init" / "spin-init.json"),
     (init_surf_jdata, p_examples / "init" / "surf.json"),
     # (init_surf_jdata, p_examples / "init" / "al.json"),
     # (init_surf_jdata, p_examples / "init" / "cu.surf.hcp.111.json"),
