@@ -532,6 +532,65 @@ class TestSpinInitCollector(unittest.TestCase):
 
 
 class TestSpinInitWorkflow(unittest.TestCase):
+    @mock.patch("dpgen.data.spin_init.run_spin_init_md")
+    @mock.patch("dpgen.data.spin_init.make_spin_init_md")
+    def test_accepts_the_same_flat_machine_format_as_init_bulk(self, make_md, run_md):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            poscar = root / "POSCAR"
+            poscar.write_text(POSCAR_TEXT)
+            incar = root / "INCAR.md"
+            incar.write_text("IBRION = 0\nNSW = 3\n")
+            potcar = root / "POTCAR"
+            potcar.write_text("POTCAR DATA\n")
+            param_path = root / "param.json"
+            param_path.write_text(
+                json.dumps(
+                    {
+                        "stages": [2],
+                        "from_poscar_path": str(poscar),
+                        "out_dir": str(root / "output"),
+                        "super_cell": [1, 1, 1],
+                        "scale": [1.0],
+                        "pert_numb": 0,
+                        "pert_box": 0.0,
+                        "pert_atom": 0.0,
+                        "md_incar": str(incar),
+                        "md_nstep": 3,
+                        "potcars": [str(potcar)],
+                    }
+                )
+            )
+            flat_machine = {
+                "api_version": "1.0",
+                "fp_command": "vasp_std",
+                "fp_machine": {
+                    "batch_type": "shell",
+                    "context_type": "local",
+                    "local_root": "./",
+                },
+                "fp_resources": {"batch_type": "shell"},
+                "fp_group_size": 1,
+                "fp_user_forward_files": [],
+                "fp_user_backward_files": [],
+            }
+            machine_path = root / "machine.json"
+            machine_path.write_text(json.dumps(flat_machine))
+
+            try:
+                spin_init.gen_spin_init(
+                    argparse.Namespace(PARAM=str(param_path), MACHINE=str(machine_path))
+                )
+            except Exception as error:
+                self.fail(
+                    "spin_init rejected a flat machine.json accepted by init_bulk: "
+                    f"{error}"
+                )
+
+            make_md.assert_called_once()
+            run_md.assert_called_once()
+            self.assertEqual(make_md.call_args.args[1]["fp_command"], "vasp_std")
+
     @mock.patch("dpgen.data.spin_init.collect_xdatcar_snapshots")
     @mock.patch("dpgen.data.spin_init.run_spin_init_md")
     @mock.patch("dpgen.data.spin_init.make_spin_init_md")

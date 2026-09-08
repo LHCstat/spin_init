@@ -56,9 +56,58 @@ An example parameter file is:
 If `NSW` in `md_incar` differs from `md_nstep`, `spin_init` follows `NSW`, as
 `init_bulk` does.
 
-Machine parameters use the normal DP-GEN `fp` configuration. `XDATCAR` is always
-added to dpdispatcher's backward files, so it need not be listed in
-`user_backward_files`. A forwarded `vasp.slurm` file is only made available in
-the task directory. It is submitted only when `fp.command` explicitly requests
-that behavior, for example `sbatch vasp.slurm`; a command such as `vasp_std`
-runs VASP directly.
+Machine parameters are loaded in the same way as `init_bulk`. The same
+`machine.json` can therefore be passed unchanged to either command. Both the
+current nested `fp` format and the legacy flat `fp_*` format are accepted.
+
+Current nested format:
+
+```json
+{
+  "api_version": "1.0",
+  "fp": {
+    "machine": {
+      "batch_type": "Slurm",
+      "context_type": "local",
+      "local_root": "./",
+      "remote_root": "/path/to/remote/work"
+    },
+    "resources": {
+      "batch_type": "Slurm",
+      "number_node": 1,
+      "cpu_per_node": 32,
+      "group_size": 1
+    },
+    "command": "srun vasp_std",
+    "user_forward_files": ["KPOINTS"]
+  }
+}
+```
+
+Legacy flat format, also accepted by `init_bulk`:
+
+```json
+{
+  "api_version": "1.0",
+  "fp_machine": {
+    "batch_type": "Slurm",
+    "context_type": "local",
+    "local_root": "./",
+    "remote_root": "/path/to/remote/work"
+  },
+  "fp_resources": {
+    "batch_type": "Slurm",
+    "number_node": 1,
+    "cpu_per_node": 32
+  },
+  "fp_command": "srun vasp_std",
+  "fp_group_size": 1,
+  "fp_user_forward_files": ["KPOINTS"]
+}
+```
+
+`XDATCAR` is always added to dpdispatcher's backward files, so it need not be
+listed in either `user_backward_files` or `fp_user_backward_files`. A forwarded
+`vasp.slurm` file is only made available in the task directory. It is submitted
+only when the corresponding command explicitly requests that behavior, for
+example `sbatch vasp.slurm`; a command such as `vasp_std` runs VASP directly.

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from dpgen import dlog
-from dpgen.data.arginfo import spin_init_jdata_arginfo, spin_init_mdata_arginfo
+from dpgen.data.arginfo import spin_init_jdata_arginfo
 from dpgen.data.gen import poscar_scale
 from dpgen.data.tools.create_random_disturb import create_disturbs_ase_dev
 from dpgen.dispatcher.Dispatcher import make_submission
@@ -374,7 +374,9 @@ def gen_spin_init(args):
 
     mdata = None
     if args.MACHINE is not None:
-        mdata = normalize(spin_init_mdata_arginfo(), load_file(args.MACHINE))
+        # Match init_bulk: convert either the current nested ``fp`` schema or
+        # the legacy flat ``fp_*`` schema into the fields used by the runner.
+        mdata = load_file(args.MACHINE)
         mdata = convert_mdata(mdata, ["fp"])
 
     output_root = Path(jdata["out_dir"]).resolve()
