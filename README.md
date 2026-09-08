@@ -45,6 +45,9 @@ DP-GEN contains the following workflows:
   - `dpgen init_bulk`: Generating initial data for bulk systems.
   - `dpgen init_surf`: Generating initial data for surface systems.
   - `dpgen init_reaction`: Generating initial data for reactive systems.
+  - `dpgen spin_init`: Generating perturbed VASP AIMD structures and exporting
+    XDATCAR snapshots. See the [Chinese quick-start guide](SPIN_INIT_GUIDE.md)
+    and [input/output reference](doc/init/spin-init-usage.md).
 - [`dpgen simplify`](https://docs.deepmodeling.com/projects/dpgen/en/latest/simplify/): Reducing the amount of existing dataset.
 - [`dpgen autotest`](https://docs.deepmodeling.com/projects/dpgen/en/latest/autotest/): Autotest for Deep Potential.
 

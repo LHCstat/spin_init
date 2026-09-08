@@ -11,6 +11,7 @@ Init
    init-bulk-jdata
    init-bulk-mdata
    spin-init.md
+   spin-init-usage.md
    spin-init-jdata
    spin-init-mdata
    init_surf.md
