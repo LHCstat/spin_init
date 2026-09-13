@@ -2,7 +2,8 @@
     "stages": [
         1,
         2,
-        3
+        3,
+        4
     ],
     "from_poscar_path": "./POSCAR",
     "out_dir": ".",
@@ -19,6 +20,9 @@
     "pert_atom": 0.01,
     "md_incar": "./INCAR.md",
     "md_nstep": 3,
+    "spin_incar": "./INCAR.spin",
+    "spin_pert_numb": 0,
+    "spin_action": "make_run",
     "potcars": [
         "./POTCAR"
     ]

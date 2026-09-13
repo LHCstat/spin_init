@@ -93,6 +93,33 @@ class TestSpinInitArginfo(unittest.TestCase):
         self.assertEqual(normalized["api_version"], "1.0")
         self.assertEqual(normalized["fp"]["command"], "vasp_std")
 
+    def test_normalizes_optional_spin_machine_parameters(self):
+        machine = {
+            "fp": {
+                "command": "vasp_std",
+                "machine": {
+                    "batch_type": "shell",
+                    "context_type": "local",
+                    "local_root": "./",
+                },
+                "resources": {"batch_type": "shell", "group_size": 1},
+            },
+            "spin": {
+                "command": "vasp_ncl",
+                "machine": {
+                    "batch_type": "shell",
+                    "context_type": "local",
+                    "local_root": "./",
+                },
+                "resources": {"batch_type": "shell", "group_size": 1},
+            },
+        }
+
+        normalized = normalize(data_arginfo.spin_init_mdata_arginfo(), machine)
+
+        self.assertEqual(normalized["fp"]["command"], "vasp_std")
+        self.assertEqual(normalized["spin"]["command"], "vasp_ncl")
+
     def test_rejects_invalid_structure_and_md_parameters(self):
         self.assertTrue(hasattr(spin_init, "validate_spin_init_parameters"))
         valid = {
@@ -663,7 +690,7 @@ class TestSpinInitWorkflow(unittest.TestCase):
             param_path.write_text(
                 json.dumps(
                     {
-                        "stages": [4],
+                        "stages": [5],
                         "from_poscar_path": "POSCAR",
                         "super_cell": [1, 1, 1],
                         "scale": [1.0],
@@ -682,7 +709,7 @@ class TestSpinInitWorkflow(unittest.TestCase):
                     argparse.Namespace(PARAM=str(param_path), MACHINE=None)
                 )
 
-            self.assertIn("unknown spin_init stage 4", str(caught.exception))
+            self.assertIn("unknown spin_init stage 5", str(caught.exception))
 
     @mock.patch("dpgen.data.spin_init.make_spin_init_structures")
     def test_uses_nsw_from_md_incar_as_upstream_init_bulk_does(self, make_structures):

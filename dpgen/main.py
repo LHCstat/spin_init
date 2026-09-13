@@ -81,7 +81,8 @@ def main_parser() -> argparse.ArgumentParser:
 
     # spin initialization from an existing POSCAR
     parser_spin_init = subparsers.add_parser(
-        "spin_init", help="Generating VASP AIMD snapshots for spin initialization."
+        "spin_init",
+        help="Generating VASP AIMD snapshots and static spin tasks.",
     )
     parser_spin_init.add_argument(
         "PARAM", type=str, help="parameter file, json/yaml format"

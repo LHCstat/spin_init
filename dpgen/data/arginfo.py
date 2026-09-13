@@ -1,6 +1,7 @@
 from dargs import Argument, Variant
 
 from dpgen.arginfo import general_mdata_arginfo
+from dpgen.dispatcher.Dispatcher import mdata_arginfo
 
 
 def init_bulk_mdata_arginfo() -> Argument:
@@ -38,7 +39,15 @@ def init_reaction_mdata_arginfo() -> Argument:
 
 def spin_init_mdata_arginfo() -> Argument:
     """Generate arginfo for ``dpgen spin_init`` machine parameters."""
-    return general_mdata_arginfo("spin_init_mdata", ("fp",))
+    result = general_mdata_arginfo("spin_init_mdata", ("fp",))
+    result.sub_fields["spin"] = Argument(
+        "spin",
+        dict,
+        optional=True,
+        sub_fields=mdata_arginfo(),
+        doc="Optional Stage 4 command, machine, and resources; fp is the fallback.",
+    )
+    return result
 
 
 def spin_init_jdata_arginfo() -> Argument:
@@ -51,7 +60,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 "stages",
                 list[int],
                 optional=False,
-                doc="Stages: 1 perturb, 2 create/run AIMD, 3 collect XDATCAR.",
+                doc="Stages: 1 perturb, 2 create/run AIMD, 3 collect XDATCAR, 4 magnetic tasks.",
             ),
             Argument(
                 "from_poscar_path",
@@ -111,8 +120,28 @@ def spin_init_jdata_arginfo() -> Argument:
                 optional=False,
                 doc="POTCAR fragments concatenated in this order.",
             ),
+            Argument(
+                "spin_incar",
+                str,
+                optional=True,
+                doc="Stage 4 static INCAR template with MAGMOM and M_CONSTR.",
+            ),
+            Argument(
+                "spin_pert_numb",
+                int,
+                optional=True,
+                default=0,
+                doc="Additional magnetic configurations. Only zero is supported until the algorithm is supplied.",
+            ),
+            Argument(
+                "spin_action",
+                str,
+                optional=True,
+                default="make_run",
+                doc="Stage 4: make, run (existing tasks), or make_run. Without MACHINE, make_run only prepares.",
+            ),
         ],
-        doc="Generate VASP AIMD snapshots for spin initialization.",
+        doc="Generate VASP AIMD snapshots and static spin tasks.",
     )
 
 

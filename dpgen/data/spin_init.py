@@ -1,4 +1,4 @@
-"""Generate VASP AIMD snapshots for the spin initialization workflow."""
+"""Generate VASP AIMD snapshots and static tasks for spin initialization."""
 
 import os
 import shutil
@@ -368,9 +368,21 @@ def gen_spin_init(args):
     validate_spin_init_parameters(jdata)
     stages = [int(stage) for stage in jdata["stages"]]
     for stage in stages:
-        if stage not in (1, 2, 3):
+        if stage not in (1, 2, 3, 4):
             raise RuntimeError(f"unknown spin_init stage {stage}")
-    _synchronize_md_nstep(jdata)
+    if 4 in stages:
+        if jdata.get("spin_action") not in ("make", "run", "make_run"):
+            raise ValueError("spin_action must be make, run or make_run")
+        if jdata["spin_action"] != "run" and not jdata.get("spin_incar"):
+            raise ValueError("stage 4 requires spin_incar")
+        if jdata.get("spin_pert_numb", 0) != 0:
+            raise ValueError(
+                "magnetic perturbation algorithm is pending; spin_pert_numb must be 0"
+            )
+        if jdata["spin_action"] == "run" and args.MACHINE is None:
+            raise ValueError("spin_action=run requires MACHINE")
+    if any(stage in (1, 2, 3) for stage in stages):
+        _synchronize_md_nstep(jdata)
 
     mdata = None
     if args.MACHINE is not None:
@@ -395,3 +407,19 @@ def gen_spin_init(args):
                 run_spin_init_md(jdata, mdata)
         elif stage == 3:
             collect_xdatcar_snapshots(jdata)
+        elif stage == 4:
+            from dpgen.data.spin_tasks import make_spin_tasks, run_spin_tasks
+
+            spin_mdata = dict(mdata or {})
+            # Optional stage-specific machine entry, with the same structure
+            # as fp. Otherwise continue to use the ordinary fp configuration.
+            if "spin" in spin_mdata:
+                spin_mdata = {
+                    "api_version": spin_mdata.get("api_version", "1.0"),
+                    "fp": spin_mdata["spin"],
+                }
+                spin_mdata = convert_mdata(spin_mdata, ["fp"])
+            if jdata["spin_action"] != "run":
+                make_spin_tasks(jdata, spin_mdata)
+            if mdata is not None and jdata["spin_action"] != "make":
+                run_spin_tasks(jdata, spin_mdata)
