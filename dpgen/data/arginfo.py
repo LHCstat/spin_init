@@ -131,7 +131,14 @@ def spin_init_jdata_arginfo() -> Argument:
                 int,
                 optional=True,
                 default=0,
-                doc="Additional magnetic configurations. Only zero is supported until the algorithm is supplied.",
+                doc="Reserved internal count; users should leave this at zero and configure pert_spin.",
+            ),
+            Argument(
+                "pert_spin",
+                list[dict],
+                optional=True,
+                default=[],
+                doc="Magnetic perturbation blocks. Canting is currently supported.",
             ),
             Argument(
                 "spin_action",

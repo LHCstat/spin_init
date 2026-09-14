@@ -70,8 +70,36 @@ class TestSpinInitArginfo(unittest.TestCase):
         normalized = normalize(data_arginfo.spin_init_jdata_arginfo(), parameters)
 
         self.assertEqual(normalized["out_dir"], ".")
+        self.assertEqual(normalized["pert_spin"], [])
         self.assertNotIn("init_fp_style", normalized)
         self.assertNotIn("skip_relax", normalized)
+
+    def test_normalizes_canting_parameter_blocks(self):
+        parameters = {
+            "stages": [4],
+            "from_poscar_path": "POSCAR",
+            "super_cell": [1, 1, 1],
+            "scale": [1.0],
+            "pert_numb": 0,
+            "pert_box": 0.0,
+            "pert_atom": 0.0,
+            "md_incar": "INCAR.md",
+            "md_nstep": 0,
+            "potcars": ["POTCAR"],
+            "spin_incar": "INCAR.spin",
+            "pert_spin": [
+                {
+                    "Canting": {
+                        "angle": [30, 60],
+                        "Rcut": 0.4,
+                    }
+                }
+            ],
+        }
+
+        normalized = normalize(data_arginfo.spin_init_jdata_arginfo(), parameters)
+
+        self.assertEqual(normalized["pert_spin"][0]["Canting"]["Rcut"], 0.4)
 
     def test_normalizes_fp_machine_parameters(self):
         self.assertTrue(hasattr(data_arginfo, "spin_init_mdata_arginfo"))

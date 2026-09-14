@@ -1,7 +1,7 @@
 """Stage 4: noncollinear VASP tasks for each exported AIMD snapshot.
 
-The perturbation provider is intentionally not implemented. It will supply
-named arrays (e.g. C1/R1) after the physical perturbation rules are specified.
+The baseline is always generated; a perturbation provider supplies additional
+named magnetic configurations such as C1 and C2.
 """
 
 import filecmp
@@ -226,7 +226,10 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
             raise ValueError(f"{parent}/{frame_name}: {error}") from error
         configs = {"000000": moments}
         if count:
-            extra = perturb(moments.copy(), count)
+            try:
+                extra = perturb(moments.copy(), count)
+            except ValueError as error:
+                raise ValueError(f"{poscar}: {error}") from error
             if not isinstance(extra, dict) or len(extra) != count:
                 raise ValueError(
                     f"{poscar}: perturbation provider must return {count} named arrays"

@@ -13,9 +13,9 @@ POSCAR
   → 03.spin：每个快照的非共线磁性静态 VASP task
 ```
 
-这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、目录生成、符号链接、
-dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。磁矩的 Canting、Rotation、Random 等
-具体扰动规则尚未确定，因此当前只生成输入磁矩不变的基准构型 `000000`。
+这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、Canting 磁矩扰动、
+目录生成、符号链接、dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。输入磁矩不变的
+基准构型命名为 `000000`，Canting 组合命名为 `C1`、`C2`……。
 
 ## 2. 安装与检查
 
@@ -89,13 +89,22 @@ LCHARG = .FALSE.
   "md_incar": "./INCAR.md",
   "md_nstep": 3,
   "spin_incar": "./INCAR.spin",
-  "spin_pert_numb": 0,
+  "pert_spin": [{
+    "Canting": {
+      "angle": [30, 60],
+      "Rcut": [0.4, 0.5],
+      "direction": [[1, 0, 0], [0, 1, 0]]
+    }
+  }],
   "spin_action": "make_run",
   "potcars": ["./POTCAR"]
 }
 ```
 
-当前 `spin_pert_numb` 必须为 `0`。程序不会用随机数冒充尚未定义的磁扰动算法。
+`angle`、`Rcut`、`direction` 的多值按笛卡尔积展开，上例生成 8 个 Canting 构型。
+`direction` 可省略；零磁矩保持不变。direction 缺省、为零或与当前磁矩平行时，程序
+从 x→y→z 中确定性地选择与磁矩最不平行的轴。Canting 保持每个非零磁矩的模长，且
+要求 `Rcut` 不大于该磁矩原始模长。`spin_pert_numb` 是内部字段，用户应省略。
 
 ## 4. machine.json
 
@@ -174,16 +183,14 @@ run_spin/
 │   ├── 00/POSCAR
 │   ├── 01/POSCAR
 │   └── 02/POSCAR
-└── 03.spin/scale-1.000/000000/00/000000/
-    ├── POSCAR -> 02.disp 中对应快照
-    ├── POTCAR -> 03.spin/POTCAR
-    ├── INCAR
-    ├── OUTCAR
-    └── OSZICAR
+└── 03.spin/scale-1.000/000000/00/
+    ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
-是普通独立文件，为以后每个 `C1`、`R1` 等磁构型写入不同向量做好准备。
+是普通独立文件，每个 `C1`、`C2` 等目录写入对应的 MAGMOM/M_CONSTR。
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。
 
@@ -201,7 +208,6 @@ stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICA
 
 ## 8. 当前 TODO
 
-- 根据后续数学定义实现 Canting、Rotation、Rotation & Canting、Random；
-- 为这些构型生成 `C1`、`R1` 等名称；
+- 根据后续数学定义实现 Rotation、Rotation & Canting、Random、Scale；
 - 实现磁矩 RMSE 筛选；
 - 转换 DeepMD 的 `spin.npy`、`spin_force.npy`。

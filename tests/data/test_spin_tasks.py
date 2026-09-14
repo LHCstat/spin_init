@@ -155,6 +155,18 @@ class TestSpinTasks(unittest.TestCase):
                 module.plan_spin_tasks(self.jdata, {}, perturb=lambda m, n: {name: m})
         self.assertFalse((self.root / "03.spin").exists())
 
+    def test_canting_failure_identifies_snapshot_config_and_atom(self):
+        from dpgen.data.spin_perturb import build_spin_perturbation
+
+        module = self.module()
+        count, provider = build_spin_perturbation(
+            [{"Canting": {"angle": 30, "Rcut": 3.0}}]
+        )
+        self.jdata["spin_pert_numb"] = count
+
+        with self.assertRaisesRegex(ValueError, "POSCAR.*C1.*atom 0.*Rcut"):
+            module.plan_spin_tasks(self.jdata, {}, perturb=provider)
+
     def test_missing_snapshot_and_reserved_forward_file_fail_before_writing(self):
         module = self.module()
         with self.assertRaisesRegex(ValueError, "INCAR"):
@@ -335,6 +347,60 @@ class TestSpinTasks(unittest.TestCase):
             spin_init.gen_spin_init(argparse.Namespace(PARAM=str(param), MACHINE=None))
         make.assert_called_once()
         run.assert_not_called()
+
+    def test_stage4_wires_canting_combinations_into_task_generation(self):
+        module = self.module()
+        self.jdata["spin_action"] = "make"
+        self.jdata["pert_spin"] = [
+            {
+                "Canting": {
+                    "angle": [30, 60],
+                    "Rcut": [0.4, 0.5],
+                    "direction": [[1, 0, 0], [0, 1, 0]],
+                }
+            }
+        ]
+        param = self.root / "input.json"
+        param.write_text(json.dumps(self.jdata))
+        with mock.patch.object(module, "make_spin_tasks") as make:
+            spin_init.gen_spin_init(argparse.Namespace(PARAM=str(param), MACHINE=None))
+
+        generated_jdata, _ = make.call_args.args
+        provider = make.call_args.kwargs["perturb"]
+        self.assertEqual(generated_jdata["spin_pert_numb"], 8)
+        self.assertEqual(
+            list(provider(np.array([[0, 0, 1.0]]), 8)),
+            [f"C{index}" for index in range(1, 9)],
+        )
+
+    def test_invalid_spin_mode_fails_before_an_earlier_stage_runs(self):
+        self.jdata["stages"] = [1, 4]
+        self.jdata["spin_action"] = "make"
+        self.jdata["md_incar"] = str(self.incar)
+        self.jdata["pert_spin"] = [{"Rotation": {"angle": 30, "axis": [0, 0, 1]}}]
+        param = self.root / "input.json"
+        param.write_text(json.dumps(self.jdata))
+
+        with mock.patch.object(spin_init, "make_spin_init_structures") as make:
+            with self.assertRaisesRegex(NotImplementedError, "Rotation"):
+                spin_init.gen_spin_init(
+                    argparse.Namespace(PARAM=str(param), MACHINE=None)
+                )
+        make.assert_not_called()
+
+    def test_run_action_still_rejects_an_unsupported_spin_mode(self):
+        self.jdata["stages"] = [4]
+        self.jdata["spin_action"] = "run"
+        self.jdata["pert_spin"] = [{"Rotation": {"angle": 30, "axis": [0, 0, 1]}}]
+        param = self.root / "input.json"
+        machine = self.root / "machine.json"
+        param.write_text(json.dumps(self.jdata))
+        machine.write_text(json.dumps({}))
+
+        with self.assertRaisesRegex(NotImplementedError, "Rotation"):
+            spin_init.gen_spin_init(
+                argparse.Namespace(PARAM=str(param), MACHINE=str(machine))
+            )
 
 
 if __name__ == "__main__":

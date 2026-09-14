@@ -34,7 +34,13 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
   "md_incar": "INCAR.md",
   "md_nstep": 3,
   "spin_incar": "INCAR.spin",
-  "spin_pert_numb": 0,
+  "pert_spin": [{
+    "Canting": {
+      "angle": [30, 60],
+      "Rcut": [0.4, 0.5],
+      "direction": [[1, 0, 0], [0, 1, 0]]
+    }
+  }],
   "spin_action": "make_run",
   "potcars": ["POTCAR"]
 }
@@ -47,11 +53,24 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
 - `make_run`: create the tasks and submit them when MACHINE is supplied, or
   only create them when MACHINE is omitted.
 
-Only `spin_pert_numb=0` is accepted until the magnetic perturbation rules are
-implemented. The current stage therefore creates one baseline configuration
-named `000000` for every snapshot. The task naming layer is already ready for
-future descriptive names such as `C1` and `R1`; it does not generate placeholder
-perturbations.
+`pert_spin` currently supports the `Canting` mode. Scalar values or lists are
+accepted for `angle` (degrees) and `Rcut`; `direction` accepts one Cartesian
+3-vector, a list of 3-vectors, or may be omitted. Parameter lists are expanded
+as a Cartesian product and named `C1`, `C2`, and so on. The original moments
+remain available as `000000`.
+
+For each nonzero initial moment **a**, Canting projects `direction` into the
+plane normal to **a**, rotates that projected direction counterclockwise by
+`angle` using the right-hand rule around **a**, and gives it length `Rcut`. The
+component along **a** is shortened so that the final moment has the same norm as
+the original. Zero moments remain zero. If `direction` is omitted or its
+projection vanishes, the Cartesian x/y/z axis least parallel to **a** is chosen
+deterministically. `Rcut` may not exceed the magnitude of any affected nonzero
+moment.
+
+`spin_pert_numb` is an internal compatibility field and should be left at its
+default zero. Rotation, combined Rotation/Canting, Random, and Scale modes are
+not implemented yet and are rejected rather than silently ignored.
 
 The output root is `out_dir` exactly; no suffix is appended. Each stage refuses
 to overwrite its existing directory. There is no `sys-*` layer because this
@@ -62,6 +81,7 @@ workflow accepts one initial POSCAR.
 01.md/scale-1.000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,XDATCAR}
 02.disp/scale-1.000/000000/00/POSCAR
 03.spin/scale-1.000/000000/00/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/C1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 ```
 
 Task-level POSCAR and POTCAR files in `01.md` and `03.spin` are real relative

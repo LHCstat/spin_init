@@ -114,7 +114,13 @@ LCHARG = .FALSE.
   "md_incar": "./INCAR.md",
   "md_nstep": 3,
   "spin_incar": "./INCAR.spin",
-  "spin_pert_numb": 0,
+  "pert_spin": [{
+    "Canting": {
+      "angle": [30, 60],
+      "Rcut": [0.4, 0.5],
+      "direction": [[1, 0, 0], [0, 1, 0]]
+    }
+  }],
   "spin_action": "make_run",
   "potcars": ["./POTCAR"]
 }
@@ -125,14 +131,39 @@ stage-4 新字段：
 | 字段 | 含义 |
 | --- | --- |
 | `spin_incar` | 磁性静态 INCAR 模板路径 |
-| `spin_pert_numb` | 额外磁构型数量；扰动规则尚未确定，因此当前必须为 `0` |
+| `pert_spin` | 磁矩扰动模式列表；当前支持 `Canting` |
+| `spin_pert_numb` | 内部兼容字段；用户应省略或保持为 `0` |
 | `spin_action` | `make`、`run` 或 `make_run` |
 
 `spin_action=make` 只生成 `03.spin`；`run` 只提交已存在的 `03.spin`，并要求提供
 MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE 时只生成。
 
-当前不会伪造旋转或倾斜算法。每个快照只产生一个保持输入磁矩不变的基准构型
-`000000`。以后实现扰动算法时可在同一级加入 PDF 中建议的 `C1`、`R1` 等名称。
+每个快照保留输入磁矩不变的基准构型 `000000`，Canting 组合依次命名为 `C1`、
+`C2`……。
+
+### Canting 参数和数学定义
+
+`angle` 和 `Rcut` 可以是单个数或数值列表；`direction` 可以是一个三维向量、三维
+向量列表，也可以省略。多个参数按笛卡尔积展开，因此 2 个 angle、2 个 Rcut、2 个
+direction 会生成 8 个构型。
+
+对于每个非零初始磁矩 **a**，程序在垂直 **a** 的平面内投影 `direction`，然后按
+右手规则绕 **a** 将投影方向逆时针旋转 `angle` 度，并把横向分量长度设为 `Rcut`。
+沿 **a** 的分量缩短为：
+
+```text
+sqrt(|a|² - Rcut²)
+```
+
+因此最终磁矩模长仍为 `|a|`。零磁矩保持不变。未提供 `direction`、direction 为零，
+或其投影为零时，会按固定的 x→y→z 顺序选择与 **a** 绝对点积最小的轴。对于任意
+受作用的非零磁矩都必须满足 `Rcut <= |a|`，否则错误会给出 `C*` 构型和原子编号。
+
+例如 `a=[0,0,1]`、`angle=30`、`Rcut=0.5`、`direction=[1,0,0]`，结果是：
+
+```text
+[sqrt(3)/4, 0.25, sqrt(3)/2]
+```
 
 ## machine.json 编写方式
 
@@ -217,12 +248,10 @@ out_dir/
 └── 03.spin/
     ├── POTCAR
     ├── tasks.json
-    └── scale-1.000/000000/00/000000/
-        ├── POSCAR -> 02.disp 中对应快照
-        ├── POTCAR -> 03.spin/POTCAR
-        ├── INCAR
-        ├── OUTCAR
-        └── OSZICAR
+    └── scale-1.000/000000/00/
+        ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。用户配置的
@@ -248,7 +277,7 @@ dpgen spin_init spin-init.json machine.json
 
 ## 当前未实现内容
 
-- Canting、Rotation、Rotation & Canting、Random 的物理扰动规则；
+- Rotation、Rotation & Canting、Random、Scale 的物理扰动规则；
 - 磁矩 RMSE 筛选；
 - DeepMD 的 `spin.npy`、`spin_force.npy` 数据转换。
 

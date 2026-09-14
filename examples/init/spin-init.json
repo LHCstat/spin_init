@@ -21,7 +21,22 @@
     "md_incar": "./INCAR.md",
     "md_nstep": 3,
     "spin_incar": "./INCAR.spin",
-    "spin_pert_numb": 0,
+    "pert_spin": [
+        {
+            "Canting": {
+                "angle": [
+                    30,
+                    60
+                ],
+                "Rcut": 0.4,
+                "direction": [
+                    1,
+                    0,
+                    0
+                ]
+            }
+        }
+    ],
     "spin_action": "make_run",
     "potcars": [
         "./POTCAR"

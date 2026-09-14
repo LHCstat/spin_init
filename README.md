@@ -46,7 +46,7 @@ DP-GEN contains the following workflows:
   - `dpgen init_surf`: Generating initial data for surface systems.
   - `dpgen init_reaction`: Generating initial data for reactive systems.
   - `dpgen spin_init`: Generating perturbed VASP AIMD structures, exporting
-    XDATCAR snapshots, and preparing static noncollinear spin tasks. See the
+    XDATCAR snapshots, and preparing Canting-perturbed noncollinear spin tasks. See the
     [Chinese quick-start guide](SPIN_INIT_GUIDE.md) and
     [input/output reference](doc/init/spin-init-usage.md).
 - [`dpgen simplify`](https://docs.deepmodeling.com/projects/dpgen/en/latest/simplify/): Reducing the amount of existing dataset.

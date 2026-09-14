@@ -370,6 +370,8 @@ def gen_spin_init(args):
     for stage in stages:
         if stage not in (1, 2, 3, 4):
             raise RuntimeError(f"unknown spin_init stage {stage}")
+    perturb_count = 0
+    perturb = None
     if 4 in stages:
         if jdata.get("spin_action") not in ("make", "run", "make_run"):
             raise ValueError("spin_action must be make, run or make_run")
@@ -377,10 +379,18 @@ def gen_spin_init(args):
             raise ValueError("stage 4 requires spin_incar")
         if jdata.get("spin_pert_numb", 0) != 0:
             raise ValueError(
-                "magnetic perturbation algorithm is pending; spin_pert_numb must be 0"
+                "spin_pert_numb is internal; leave it at 0 and configure pert_spin"
             )
         if jdata["spin_action"] == "run" and args.MACHINE is None:
             raise ValueError("spin_action=run requires MACHINE")
+        from dpgen.data.spin_perturb import build_spin_perturbation
+
+        if jdata["spin_action"] != "run":
+            perturb_count, perturb = build_spin_perturbation(jdata.get("pert_spin", []))
+        else:
+            # Run-only uses the saved manifest, but input validation must still
+            # reject misspelled or not-yet-supported perturbation modes.
+            build_spin_perturbation(jdata.get("pert_spin", []))
     if any(stage in (1, 2, 3) for stage in stages):
         _synchronize_md_nstep(jdata)
 
@@ -420,6 +430,8 @@ def gen_spin_init(args):
                 }
                 spin_mdata = convert_mdata(spin_mdata, ["fp"])
             if jdata["spin_action"] != "run":
-                make_spin_tasks(jdata, spin_mdata)
+                spin_jdata = dict(jdata)
+                spin_jdata["spin_pert_numb"] = perturb_count
+                make_spin_tasks(spin_jdata, spin_mdata, perturb=perturb)
             if mdata is not None and jdata["spin_action"] != "make":
                 run_spin_tasks(jdata, spin_mdata)
