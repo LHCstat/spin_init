@@ -198,6 +198,79 @@ class TestScale(unittest.TestCase):
                 self.module().build_spin_perturbation([{"Scale": parameters}])
 
 
+class TestRotaCant(unittest.TestCase):
+    def module(self):
+        from dpgen.data import spin_perturb
+
+        return spin_perturb
+
+    def test_rotation_is_applied_before_canting(self):
+        actual = self.module().rota_cant_moments(
+            [[1.0, 0.0, 0.0]],
+            rotation_angle=90,
+            axis=[0, 0, 1],
+            canting_angle=90,
+            rng=SequenceRng([0.0]),
+        )
+
+        np.testing.assert_allclose(actual, [[0.0, 0.0, 1.0]], atol=1e-14)
+
+    def test_rota_cant_cartesian_product_and_seed_are_stable(self):
+        parameters = [
+            {
+                "Rota_Cant": {
+                    "R_angle": [30, 60],
+                    "axis": [[0, 1, 0], [0, 0, 1]],
+                    "C_angle": [45, 90],
+                    "seed": 12345,
+                }
+            }
+        ]
+        count_a, provider_a = self.module().build_spin_perturbation(parameters)
+        count_b, provider_b = self.module().build_spin_perturbation(parameters)
+        moments = np.array([[0.0, 0.0, 2.0]])
+
+        configurations_a = provider_a(moments, count_a)
+        configurations_b = provider_b(moments, count_b)
+
+        self.assertEqual(count_a, 8)
+        self.assertEqual(
+            list(configurations_a), [f"RC{index}" for index in range(1, 9)]
+        )
+        for name in configurations_a:
+            np.testing.assert_array_equal(
+                configurations_a[name], configurations_b[name]
+            )
+            np.testing.assert_allclose(
+                np.linalg.norm(configurations_a[name][0]), 2.0
+            )
+
+    def test_rota_cant_rejects_missing_invalid_and_unknown_fields(self):
+        invalid = [
+            {"axis": [0, 0, 1], "C_angle": 30},
+            {"R_angle": 30, "C_angle": 30},
+            {"R_angle": 30, "axis": [0, 0, 1]},
+            {"R_angle": 361, "axis": [0, 0, 1], "C_angle": 30},
+            {"R_angle": 30, "axis": [0, 0, 0], "C_angle": 30},
+            {"R_angle": 30, "axis": [0, 0, 1], "C_angle": 181},
+            {
+                "R_angle": 30,
+                "axis": [0, 0, 1],
+                "C_angle": 30,
+                "seed": None,
+            },
+            {
+                "R_angle": 30,
+                "axis": [0, 0, 1],
+                "C_angle": 30,
+                "extra": 1,
+            },
+        ]
+        for parameters in invalid:
+            with self.subTest(parameters=parameters), self.assertRaises(ValueError):
+                self.module().build_spin_perturbation([{"Rota_Cant": parameters}])
+
+
 class TestCanting(unittest.TestCase):
     def module(self):
         from dpgen.data import spin_perturb

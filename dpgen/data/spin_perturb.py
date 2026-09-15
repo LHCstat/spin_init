@@ -210,6 +210,14 @@ def cant_moments(moments, angle, rng=None):
     return result
 
 
+def rota_cant_moments(
+    moments, rotation_angle, axis, canting_angle, rng=None
+):
+    """Apply a global Rotation followed by atomwise Canting."""
+    rotated = rotate_moments(moments, rotation_angle, axis)
+    return cant_moments(rotated, canting_angle, rng=rng)
+
+
 def _angle_values(value):
     return _number_values(value, "Canting angle", 0.0, 180.0)
 
@@ -232,7 +240,13 @@ def build_spin_perturbation(pert_spin):
         return 0, None
 
     configurations = []
-    mode_counts = {"Canting": 0, "Rotation": 0, "Random": 0, "Scale": 0}
+    mode_counts = {
+        "Canting": 0,
+        "Rotation": 0,
+        "Rota_Cant": 0,
+        "Random": 0,
+        "Scale": 0,
+    }
     for block_index, block in enumerate(pert_spin):
         if not isinstance(block, dict) or not block:
             raise ValueError(f"pert_spin[{block_index}] must be a nonempty object")
@@ -337,6 +351,48 @@ def build_spin_perturbation(pert_spin):
                         lambda moments, delta=delta: scale_moments(moments, delta),
                     )
                 )
+        elif mode == "Rota_Cant":
+            allowed = {"R_angle", "axis", "C_angle", "seed"}
+            unknown = set(parameters) - allowed
+            if unknown:
+                raise ValueError(
+                    f"unknown Rota_Cant parameter(s): {', '.join(sorted(unknown))}"
+                )
+            missing = {"R_angle", "axis", "C_angle"} - set(parameters)
+            if missing:
+                raise ValueError(
+                    f"missing Rota_Cant parameter(s): {', '.join(sorted(missing))}"
+                )
+            rotation_angles = _number_values(
+                parameters["R_angle"], "Rota_Cant R_angle", 0.0, 360.0
+            )
+            axes = _axis_values(parameters["axis"], "Rota_Cant axis")
+            canting_angles = _number_values(
+                parameters["C_angle"], "Rota_Cant C_angle", 0.0, 180.0
+            )
+            seed = _seed_value(parameters["seed"]) if "seed" in parameters else None
+            rng = np.random.default_rng(seed)
+            for rotation_angle in rotation_angles:
+                for axis in axes:
+                    for canting_angle in canting_angles:
+                        mode_counts[mode] += 1
+                        name = f"RC{mode_counts[mode]}"
+                        configurations.append(
+                            (
+                                name,
+                                lambda moments,
+                                rotation_angle=rotation_angle,
+                                axis=axis,
+                                canting_angle=canting_angle,
+                                rng=rng: rota_cant_moments(
+                                    moments,
+                                    rotation_angle,
+                                    axis,
+                                    canting_angle,
+                                    rng,
+                                ),
+                            )
+                        )
         else:
             raise NotImplementedError(f"spin perturbation mode {mode!r} is not implemented")
 
