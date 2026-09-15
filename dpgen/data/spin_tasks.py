@@ -186,6 +186,27 @@ def _snapshot_poscars(jdata):
     ]
 
 
+def _spin_incar_sources(value):
+    """Return ordered ``(optional directory label, source path)`` pairs."""
+    if isinstance(value, str):
+        if not value:
+            raise ValueError("spin_incar must be a nonempty string or nonempty list")
+        return [(None, value)]
+    if not isinstance(value, list) or not value:
+        raise ValueError("spin_incar must be a nonempty string or nonempty list")
+    sources = []
+    resolved = set()
+    for index, path in enumerate(value):
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"spin_incar[{index}] must be a nonempty string")
+        normalized = Path(path).resolve()
+        if normalized in resolved:
+            raise ValueError(f"spin_incar[{index}] duplicates an earlier path: {path}")
+        resolved.add(normalized)
+        sources.append((f"incar-{index:03d}", path))
+    return sources
+
+
 def plan_spin_tasks(jdata, mdata, perturb=None):
     """Validate all inputs and return one task per snapshot/configuration.
 
@@ -206,6 +227,7 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
         raise ValueError("potcars must contain at least one file")
     for path in jdata["potcars"]:
         _require_file(path, "spin POTCAR source")
+    incar_sources = _spin_incar_sources(jdata.get("spin_incar"))
     tasks = []
     species_reference = None
     for parent, poscar in _snapshot_poscars(jdata):
@@ -218,39 +240,50 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
         if species_reference is not None and species != species_reference:
             raise ValueError(f"snapshot atom order/species differs: {poscar}")
         species_reference = species
-        try:
-            incar, moments = read_spin_incar(jdata["spin_incar"], len(structure))
-        except FileNotFoundError as error:
-            raise FileNotFoundError(f"{parent}/{frame_name}: {error}") from error
-        except ValueError as error:
-            raise ValueError(f"{parent}/{frame_name}: {error}") from error
-        configs = {"000000": moments}
-        if count:
+        for incar_label, incar_source in incar_sources:
+            task_parent = f"{parent}/{frame_name}"
+            if incar_label is not None:
+                task_parent = f"{task_parent}/{incar_label}"
+            source_context = f"{task_parent} ({incar_source})"
             try:
-                extra = perturb(moments.copy(), count)
+                incar, moments = read_spin_incar(incar_source, len(structure))
+            except FileNotFoundError as error:
+                raise FileNotFoundError(f"{source_context}: {error}") from error
             except ValueError as error:
-                raise ValueError(f"{poscar}: {error}") from error
-            if not isinstance(extra, dict) or len(extra) != count:
-                raise ValueError(
-                    f"{poscar}: perturbation provider must return {count} named arrays"
+                raise ValueError(f"{source_context}: {error}") from error
+            configs = {"000000": moments}
+            if count:
+                try:
+                    extra = perturb(moments.copy(), count)
+                except ValueError as error:
+                    raise ValueError(f"{source_context}: {error}") from error
+                if not isinstance(extra, dict) or len(extra) != count:
+                    raise ValueError(
+                        f"{source_context}: perturbation provider must return "
+                        f"{count} named arrays"
+                    )
+                for name, values in extra.items():
+                    if (
+                        not isinstance(name, str)
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name)
+                        or name == "000000"
+                    ):
+                        raise ValueError(
+                            f"{source_context}: invalid magnetic configuration "
+                            f"name: {name!r}"
+                        )
+                    configs[name] = _vectors(
+                        values, len(structure), f"{source_context}: {name}"
+                    )
+            for name, values in configs.items():
+                tasks.append(
+                    {
+                        "task": f"{task_parent}/{name}",
+                        "poscar": poscar,
+                        "incar": incar,
+                        "moments": values,
+                    }
                 )
-            for name, values in extra.items():
-                if (
-                    not isinstance(name, str)
-                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name)
-                    or name == "000000"
-                ):
-                    raise ValueError(f"invalid magnetic configuration name: {name!r}")
-                configs[name] = _vectors(values, len(structure), f"{poscar}: {name}")
-        for name, values in configs.items():
-            tasks.append(
-                {
-                    "task": f"{parent}/{frame_name}/{name}",
-                    "poscar": poscar,
-                    "incar": incar,
-                    "moments": values,
-                }
-            )
     return tasks
 
 

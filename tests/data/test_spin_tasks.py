@@ -121,6 +121,93 @@ class TestSpinTasks(unittest.TestCase):
         self.assertFalse((self.root / "03.spin").exists())
         np.testing.assert_array_equal(tasks[1]["moments"], [[2, 0, 0], [0, 0, 0]])
 
+    def test_multiple_spin_incars_add_indexed_layer_and_keep_initial_moments(self):
+        module = self.module()
+        second_incar = self.root / "INCAR_second"
+        second_incar.write_text(TEMPLATE.replace("0 0 2", "0 2 0"))
+        self.jdata["spin_incar"] = [str(self.incar), str(second_incar)]
+
+        tasks = module.plan_spin_tasks(self.jdata, {})
+
+        self.assertEqual(
+            [task["task"] for task in tasks],
+            [
+                "scale-1.000/000000/00/incar-000/000000",
+                "scale-1.000/000000/00/incar-001/000000",
+                "scale-1.000/000000/01/incar-000/000000",
+                "scale-1.000/000000/01/incar-001/000000",
+            ],
+        )
+        np.testing.assert_array_equal(tasks[0]["moments"], [[0, 0, 2], [0, 0, 0]])
+        np.testing.assert_array_equal(tasks[1]["moments"], [[0, 2, 0], [0, 0, 0]])
+        self.assertFalse((self.root / "03.spin").exists())
+
+    def test_multiple_spin_incars_share_one_reproducible_rng_sequence(self):
+        from dpgen.data.spin_perturb import build_spin_perturbation
+
+        module = self.module()
+        second_incar = self.root / "INCAR_same_moments"
+        second_incar.write_text(TEMPLATE)
+        self.jdata["spin_incar"] = [str(self.incar), str(second_incar)]
+        parameters = [{"Random": {"num": 1, "seed": 2468}}]
+        count_a, provider_a = build_spin_perturbation(parameters)
+        count_b, provider_b = build_spin_perturbation(parameters)
+        self.jdata["spin_pert_numb"] = count_a
+
+        tasks_a = module.plan_spin_tasks(self.jdata, {}, perturb=provider_a)
+        tasks_b = module.plan_spin_tasks(self.jdata, {}, perturb=provider_b)
+        random_a = [
+            task["moments"] for task in tasks_a if task["task"].endswith("Rand1")
+        ]
+        random_b = [
+            task["moments"] for task in tasks_b if task["task"].endswith("Rand1")
+        ]
+
+        self.assertEqual(len(random_a), 4)
+        for moments_a, moments_b in zip(random_a, random_b):
+            np.testing.assert_array_equal(moments_a, moments_b)
+        self.assertFalse(np.array_equal(random_a[0], random_a[1]))
+
+    def test_multiple_spin_incar_input_rejects_empty_duplicate_and_bad_entries(self):
+        module = self.module()
+        invalid_inputs = [
+            ([], "nonempty"),
+            ([str(self.incar), str(self.incar)], "duplicate"),
+            ([str(self.incar), 3], r"spin_incar\[1\]"),
+        ]
+        for spin_incar, message in invalid_inputs:
+            self.jdata["spin_incar"] = spin_incar
+            with (
+                self.subTest(spin_incar=spin_incar),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                module.plan_spin_tasks(self.jdata, {})
+        self.assertFalse((self.root / "03.spin").exists())
+
+    def test_bad_second_spin_incar_reports_index_path_and_snapshot(self):
+        module = self.module()
+        bad_incar = self.root / "INCAR_bad"
+        bad_incar.write_text(TEMPLATE.replace("MAGMOM", "MAMGOM"))
+        self.jdata["spin_incar"] = [str(self.incar), str(bad_incar)]
+
+        with self.assertRaisesRegex(
+            ValueError, r"scale-1\.000/000000/00.*incar-001.*INCAR_bad"
+        ):
+            module.plan_spin_tasks(self.jdata, {})
+        self.assertFalse((self.root / "03.spin").exists())
+
+    def test_missing_second_spin_incar_reports_index_path_and_snapshot(self):
+        module = self.module()
+        missing_incar = self.root / "INCAR_missing"
+        self.jdata["spin_incar"] = [str(self.incar), str(missing_incar)]
+
+        with self.assertRaisesRegex(
+            FileNotFoundError,
+            r"scale-1\.000/000000/00.*incar-001.*INCAR_missing",
+        ):
+            module.plan_spin_tasks(self.jdata, {})
+        self.assertFalse((self.root / "03.spin").exists())
+
     def test_ordered_pipeline_plans_baseline_and_final_leaves(self):
         from dpgen.data.spin_perturb import build_spin_perturbation
 
@@ -223,6 +310,23 @@ class TestSpinTasks(unittest.TestCase):
             module.read_spin_incar(path / "INCAR", 2)
         with self.assertRaisesRegex(RuntimeError, "already exists"):
             module.make_spin_tasks(self.jdata, {})
+
+    def test_multiple_spin_incars_create_real_symlinks_in_indexed_layers(self):
+        _skip_without_symlink_privilege()
+        module = self.module()
+        second_incar = self.root / "INCAR_second"
+        second_incar.write_text(TEMPLATE.replace("0 0 2", "0 2 0"))
+        self.jdata["spin_incar"] = [str(self.incar), str(second_incar)]
+
+        paths = module.make_spin_tasks(self.jdata, {})
+
+        self.assertIn("scale-1.000/000000/00/incar-000/000000", paths)
+        self.assertIn("scale-1.000/000000/00/incar-001/000000", paths)
+        for task in paths:
+            path = self.root / "03.spin" / task
+            self.assertTrue((path / "POSCAR").is_symlink())
+            self.assertTrue((path / "POTCAR").is_symlink())
+            self.assertFalse((path / "INCAR").is_symlink())
 
     def test_run_materializes_forward_files_missing_from_existing_tasks(self):
         module = self.module()

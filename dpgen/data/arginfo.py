@@ -122,9 +122,9 @@ def spin_init_jdata_arginfo() -> Argument:
             ),
             Argument(
                 "spin_incar",
-                str,
+                [str, list[str]],
                 optional=True,
-                doc="Stage 4 static INCAR template with MAGMOM and M_CONSTR.",
+                doc="One Stage 4 static INCAR template, or an ordered list of templates, each with MAGMOM and M_CONSTR.",
             ),
             Argument(
                 "spin_pert_numb",

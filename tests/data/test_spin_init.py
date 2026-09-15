@@ -101,6 +101,25 @@ class TestSpinInitArginfo(unittest.TestCase):
 
         self.assertEqual(normalized["pert_spin"][0]["Canting"]["seed"], 12345)
 
+    def test_normalizes_multiple_spin_incar_paths_in_input_order(self):
+        parameters = {
+            "stages": [4],
+            "from_poscar_path": "POSCAR",
+            "super_cell": [1, 1, 1],
+            "scale": [1.0],
+            "pert_numb": 0,
+            "pert_box": 0.0,
+            "pert_atom": 0.0,
+            "md_incar": "INCAR.md",
+            "md_nstep": 0,
+            "potcars": ["POTCAR"],
+            "spin_incar": ["INCAR.state_1", "INCAR.state_2"],
+        }
+
+        normalized = normalize(data_arginfo.spin_init_jdata_arginfo(), parameters)
+
+        self.assertEqual(normalized["spin_incar"], ["INCAR.state_1", "INCAR.state_2"])
+
     def test_normalizes_all_ordered_spin_operation_blocks_without_reordering(self):
         parameters = {
             "stages": [4],
