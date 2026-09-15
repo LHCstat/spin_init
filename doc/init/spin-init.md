@@ -14,12 +14,12 @@ four stages:
 dpgen spin_init PARAM [MACHINE]
 ```
 
-The full workflow uses two separate INCAR files. `md_incar` is the AIMD INCAR
-for stage 2. `spin_incar` is the static noncollinear template for stage 4. The
-stage-4 template must contain equal `MAGMOM` and `M_CONSTR` vectors, with three
-finite Cartesian components for every atom in the POSCAR. It must also enable
-`LNONCOLLINEAR` (or `LSORBIT`) and describe a static calculation (`NSW=0` and
-`IBRION=-1`).
+The full workflow uses two INCAR roles. `md_incar` is the AIMD INCAR for stage
+2. `spin_incar` is either one static noncollinear template or an ordered list
+of templates for stage 4. Every stage-4 template must contain equal `MAGMOM`
+and `M_CONSTR` vectors, with three finite Cartesian components for every atom
+in the POSCAR. It must also enable `LNONCOLLINEAR` (or `LSORBIT`) and describe a
+static calculation (`NSW=0` and `IBRION=-1`).
 
 ```json
 {
@@ -43,6 +43,20 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
   "potcars": ["POTCAR"]
 }
 ```
+
+The original string form remains backward compatible. To perturb several
+initial magnetic states with the same pipeline, use:
+
+```json
+"spin_incar": ["INCAR.state_1", "INCAR.state_2"]
+```
+
+A list must be nonempty and must not repeat a resolved path. List entries add
+an `incar-000`, `incar-001`, ... directory between the snapshot and magnetic
+configuration. A string keeps the original directory layout. Processing order
+is snapshot, then INCAR list order, then perturbation branch. All templates
+share the provider's continuous random-number sequence, so their stochastic
+results differ but remain reproducible for identical seeds and input order.
 
 `spin_action` controls stage 4:
 
@@ -98,6 +112,13 @@ workflow accepts one initial POSCAR.
 02.disp/scale-1.000/000000/00/POSCAR
 03.spin/scale-1.000/000000/00/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/R1-C1-S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+```
+
+With a `spin_incar` list, the last two paths instead become, for example:
+
+```text
+03.spin/scale-1.000/000000/00/incar-000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/incar-001/R1-C1-S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 ```
 
 Task-level POSCAR and POTCAR files in `01.md` and `03.spin` are real relative

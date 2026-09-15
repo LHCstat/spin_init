@@ -30,13 +30,13 @@ dpgen spin_init PARAM [MACHINE]
 
 ## 输入文件
 
-完整流程需要两个不同的 INCAR：
+完整流程需要两类 INCAR，其中 stage 4 可以提供一个或多个初始磁矩模板：
 
 | 文件 | 作用 |
 | --- | --- |
 | `POSCAR` | 初始结构 |
 | `INCAR.md` | stage 2 的 AIMD 参数 |
-| `INCAR.spin` | stage 4 的非共线磁性静态计算模板 |
+| `INCAR.spin` 或多个 `INCAR.state_*` | stage 4 的非共线磁性静态计算模板 |
 | `POTCAR` 或多个赝势片段 | VASP 赝势，顺序必须与 POSCAR 一致 |
 | `spin-init.json` | 工作流参数 |
 | `machine.json` | 自动提交时使用的 dpdispatcher 配置 |
@@ -68,7 +68,7 @@ LCHARG = F
 
 ### `INCAR.spin` 编写方式
 
-这是独立的 stage-4 模板，不会替代或修改 `INCAR.md`。目前要求：
+这是独立的 stage-4 模板，不会替代或修改 `INCAR.md`。每个模板都要求：
 
 - 使用正确标签 `MAGMOM`，不是 `MAMGOM`；
 - 同时存在 `MAGMOM` 和 `M_CONSTR`，且两者数值完全相同；
@@ -128,13 +128,34 @@ stage-4 新字段：
 
 | 字段 | 含义 |
 | --- | --- |
-| `spin_incar` | 磁性静态 INCAR 模板路径 |
+| `spin_incar` | 一个磁性静态 INCAR 路径，或按顺序排列的非空路径列表 |
 | `pert_spin` | 有序磁矩操作列表；支持 `Rotation`、`Canting`、`Rota_Cant`、`Random`、`Scale` |
 | `spin_pert_numb` | 内部兼容字段；用户应省略或保持为 `0` |
 | `spin_action` | `make`、`run` 或 `make_run` |
 
 `spin_action=make` 只生成 `03.spin`；`run` 只提交已存在的 `03.spin`，并要求提供
 MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE 时只生成。
+
+单个初始 INCAR 沿用字符串写法和原有输出路径：
+
+```json
+"spin_incar": "./INCAR.spin"
+```
+
+若要对多个初始磁矩状态执行同一套扰动，按需要的处理顺序写成列表：
+
+```json
+"spin_incar": [
+  "./INCAR.state_1",
+  "./INCAR.state_2"
+]
+```
+
+列表必须非空，每项必须是非空字符串，解析后的文件路径不能重复。列表输入会在
+snapshot 与磁构型之间增加 `incar-000`、`incar-001`……层；即使列表中只有一个文件也
+会增加 `incar-000`。每个文件提供自己的初始 `MAGMOM/M_CONSTR`，随后应用相同的
+`pert_spin`。执行顺序固定为 snapshot → INCAR 输入顺序 → 磁扰动分支。所有 INCAR
+共用一个连续 RNG 序列，不会分别重新 seed，所以随机结果不同但整体可以复现。
 
 每个快照保留输入磁矩不变的基准构型 `000000`。`pert_spin` 每项必须且只能包含一个
 模式，按列表顺序执行，允许重复模式。每一步都对当前全部分支做笛卡尔展开，只输出
@@ -294,14 +315,18 @@ out_dir/
     ├── POTCAR
     ├── tasks.json
     └── scale-1.000/000000/00/
-        ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        ├── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        └── R1-C2-S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        ├── incar-000/
+        │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        │   └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        └── incar-001/
+            ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+            └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。用户配置的
 backward files 会在此基础上追加。`03.spin` 中 POSCAR/POTCAR 必须是真实相对符号链接，
-INCAR 则是每个磁构型自己的普通文件。
+INCAR 则是每个磁构型自己的普通文件。上图展示列表写法；字符串写法保持原结构，不含
+`incar-###` 层。
 
 ## 分阶段运行
 

@@ -46,18 +46,19 @@ python -m pip install "dpdispatcher[bohrium]"
 work/
 ├── POSCAR
 ├── INCAR.md
-├── INCAR.spin
+├── INCAR.spin.1
+├── INCAR.spin.2
 ├── POTCAR
 ├── KPOINTS
 ├── spin-init.json
 └── machine.json
 ```
 
-完整流程有两个 INCAR：`INCAR.md` 只供 AIMD 使用；`INCAR.spin` 只供 stage 4 使用。
-两者不会相互覆盖。
+完整流程有两类 INCAR：`INCAR.md` 只供 AIMD 使用；stage 4 可以使用一个或多个
+`INCAR.spin.*` 初始磁矩模板。两类文件不会相互覆盖。
 
-`INCAR.spin` 中必须有正确的 `MAGMOM` 和 `M_CONSTR` 标签。每个原子写三个分量，且
-两行数值相同。例如二原子体系：
+每个 stage-4 INCAR 中必须有正确的 `MAGMOM` 和 `M_CONSTR` 标签。每个原子写三个
+分量，且两行数值相同。例如二原子体系：
 
 ```text
 SYSTEM = spin_init_static
@@ -88,7 +89,7 @@ LCHARG = .FALSE.
   "pert_atom": 0.01,
   "md_incar": "./INCAR.md",
   "md_nstep": 3,
-  "spin_incar": "./INCAR.spin",
+  "spin_incar": ["./INCAR.spin.1", "./INCAR.spin.2"],
   "pert_spin": [
     {"Rotation": {"angle": 45, "axis": [0, 0, 1]}},
     {"Canting": {"angle": [30, 60], "seed": 12345}},
@@ -98,6 +99,12 @@ LCHARG = .FALSE.
   "potcars": ["./POTCAR"]
 }
 ```
+
+`spin_incar` 也可以继续写成单个字符串，此时输出目录与旧版本完全一致。写成列表时，
+列表必须非空、路径不能重复，并按输入顺序增加 `incar-000`、`incar-001`……目录。每个
+模板都使用自己的初始 `MAGMOM/M_CONSTR`，然后执行同一套 `pert_spin` 操作。随机操作
+共用一个连续 RNG 序列，遍历顺序为 snapshot → INCAR 输入顺序 → 磁扰动分支，因此
+不同 INCAR 的随机结果不同，但相同 seed 和输入顺序仍可完整复现。
 
 `pert_spin` 是有序操作列表：每项必须且只能写一个模式，按列表顺序依次执行；同一模式
 可以重复。每一步都会对已有全部分支做笛卡尔展开，只把最终叶子写入 `03.spin`。上例
@@ -199,13 +206,17 @@ run_spin/
 │   ├── 01/POSCAR
 │   └── 02/POSCAR
 └── 03.spin/scale-1.000/000000/00/
-    ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    ├── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    └── R1-C2-S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    ├── incar-000/
+    │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    │   └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    └── incar-001/
+        ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
-是普通独立文件，每个组合目录写入对应的 MAGMOM/M_CONSTR。
+是普通独立文件，每个组合目录写入对应的 MAGMOM/M_CONSTR。若 `spin_incar` 是单个
+字符串，则不会出现 `incar-###` 层，继续使用原有路径。
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。
 
