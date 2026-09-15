@@ -103,6 +103,34 @@ def rotate_moments(moments, angle, axis):
     )
 
 
+def _require_uniform_rng(rng, mode):
+    if not callable(getattr(rng, "uniform", None)):
+        raise ValueError(f"{mode} rng must provide uniform(low, high)")
+
+
+def randomize_moments(moments, rng=None):
+    """Give every nonzero moment an independent uniform sphere direction."""
+    result = _moments_array(moments)
+    if rng is None:
+        rng = np.random.default_rng()
+    _require_uniform_rng(rng, "Random")
+    for atom_index, moment in enumerate(result):
+        _, magnitude = _unit_and_magnitude(moment)
+        if magnitude == 0.0:
+            continue
+        if not np.isfinite(magnitude):
+            raise ValueError(
+                f"atom {atom_index}: magnetic-moment magnitude is too large"
+            )
+        z = rng.uniform(-1.0, 1.0)
+        azimuth = rng.uniform(0.0, 2.0 * np.pi)
+        radius = np.sqrt(max(0.0, 1.0 - z * z))
+        result[atom_index] = magnitude * np.array(
+            [radius * np.cos(azimuth), radius * np.sin(azimuth), z]
+        )
+    return result
+
+
 def cant_moments(moments, angle, rng=None):
     """Cant every nonzero moment by ``angle`` with random atomwise azimuths."""
     result = _moments_array(moments)
@@ -117,8 +145,7 @@ def cant_moments(moments, angle, rng=None):
         return result
     if rng is None:
         rng = np.random.default_rng()
-    if not callable(getattr(rng, "uniform", None)):
-        raise ValueError("Canting rng must provide uniform(low, high)")
+    _require_uniform_rng(rng, "Canting")
 
     radians = np.deg2rad(angle)
     polar_cosine = np.cos(radians)
@@ -167,7 +194,7 @@ def build_spin_perturbation(pert_spin):
         return 0, None
 
     configurations = []
-    mode_counts = {"Canting": 0, "Rotation": 0}
+    mode_counts = {"Canting": 0, "Rotation": 0, "Random": 0}
     for block_index, block in enumerate(pert_spin):
         if not isinstance(block, dict) or not block:
             raise ValueError(f"pert_spin[{block_index}] must be a nonempty object")
@@ -224,6 +251,32 @@ def build_spin_perturbation(pert_spin):
                             moments, angle=angle, axis=axis
                         ))
                     )
+        elif mode == "Random":
+            unknown = set(parameters) - {"num", "seed"}
+            if unknown:
+                raise ValueError(
+                    f"unknown Random parameter(s): {', '.join(sorted(unknown))}"
+                )
+            missing = {"num"} - set(parameters)
+            if missing:
+                raise ValueError(
+                    f"missing Random parameter(s): {', '.join(sorted(missing))}"
+                )
+            number = parameters["num"]
+            if (
+                isinstance(number, (bool, np.bool_))
+                or not isinstance(number, (int, np.integer))
+                or number <= 0
+            ):
+                raise ValueError("Random num must be a positive integer")
+            seed = _seed_value(parameters["seed"]) if "seed" in parameters else None
+            rng = np.random.default_rng(seed)
+            for _ in range(int(number)):
+                mode_counts[mode] += 1
+                name = f"Rand{mode_counts[mode]}"
+                configurations.append(
+                    (name, lambda moments, rng=rng: randomize_moments(moments, rng))
+                )
         else:
             raise NotImplementedError(f"spin perturbation mode {mode!r} is not implemented")
 

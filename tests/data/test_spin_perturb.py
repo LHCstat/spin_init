@@ -88,6 +88,56 @@ class TestRotation(unittest.TestCase):
                 self.module().build_spin_perturbation([block])
 
 
+class TestRandom(unittest.TestCase):
+    def module(self):
+        from dpgen.data import spin_perturb
+
+        return spin_perturb
+
+    def test_uniform_sphere_formula_preserves_each_magnitude_and_zero(self):
+        rng = SequenceRng([0.0, 0.0, 0.0, np.pi / 2])
+
+        actual = self.module().randomize_moments(
+            [[2, 0, 0], [0, 0, 0], [0, 0, 3]], rng=rng
+        )
+
+        np.testing.assert_allclose(
+            actual,
+            [[2, 0, 0], [0, 0, 0], [0, 3, 0]],
+            atol=1e-14,
+        )
+
+    def test_random_num_creates_seeded_sequence_without_reseeding(self):
+        parameters = [{"Random": {"num": 3, "seed": 789}}]
+        count_a, provider_a = self.module().build_spin_perturbation(parameters)
+        count_b, provider_b = self.module().build_spin_perturbation(parameters)
+        moments = np.array([[0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+
+        first_a = provider_a(moments, count_a)
+        next_a = provider_a(moments, count_a)
+        first_b = provider_b(moments, count_b)
+
+        self.assertEqual(list(first_a), ["Rand1", "Rand2", "Rand3"])
+        for name in first_a:
+            np.testing.assert_array_equal(first_a[name], first_b[name])
+            np.testing.assert_allclose(np.linalg.norm(first_a[name][0]), 2.0)
+            self.assertFalse(np.array_equal(first_a[name], next_a[name]))
+
+    def test_random_requires_positive_integer_num_and_valid_seed(self):
+        invalid = [
+            {"num": 0},
+            {"num": -1},
+            {"num": 1.5},
+            {"num": True},
+            {"num": None},
+            {"num": 1, "seed": None},
+            {"num": 1, "extra": 1},
+        ]
+        for parameters in invalid:
+            with self.subTest(parameters=parameters), self.assertRaises(ValueError):
+                self.module().build_spin_perturbation([{"Random": parameters}])
+
+
 class TestCanting(unittest.TestCase):
     def module(self):
         from dpgen.data import spin_perturb
