@@ -16,6 +16,78 @@ class SequenceRng:
         return value
 
 
+class TestRotation(unittest.TestCase):
+    def module(self):
+        from dpgen.data import spin_perturb
+
+        return spin_perturb
+
+    def test_right_hand_rotation_uses_normalized_global_axis(self):
+        moments = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+
+        actual = self.module().rotate_moments(moments, 90, [0, 0, 2])
+
+        np.testing.assert_allclose(actual, [[0, 1, 0], [0, 0, 0]], atol=1e-14)
+
+    def test_rotation_endpoints_preserve_expected_vectors(self):
+        module = self.module()
+        moments = np.array([[1.0, 2.0, 3.0]])
+
+        np.testing.assert_array_equal(
+            module.rotate_moments(moments, 0, [0, 0, 1]), moments
+        )
+        np.testing.assert_allclose(
+            module.rotate_moments(moments, 360, [0, 0, 1]),
+            moments,
+            atol=1e-14,
+        )
+        np.testing.assert_allclose(
+            module.rotate_moments([[1, 0, 0]], 180, [0, 0, 1]),
+            [[-1, 0, 0]],
+            atol=1e-14,
+        )
+
+    def test_rotation_cartesian_product_is_angle_outer_axis_inner(self):
+        count, provider = self.module().build_spin_perturbation(
+            [
+                {
+                    "Rotation": {
+                        "angle": [90, 180],
+                        "axis": [[0, 0, 1], [0, 1, 0]],
+                    }
+                }
+            ]
+        )
+
+        configurations = provider(np.array([[1.0, 0.0, 0.0]]), count)
+
+        self.assertEqual(count, 4)
+        self.assertEqual(list(configurations), ["R1", "R2", "R3", "R4"])
+        np.testing.assert_allclose(configurations["R1"], [[0, 1, 0]], atol=1e-14)
+        np.testing.assert_allclose(configurations["R2"], [[0, 0, -1]], atol=1e-14)
+
+    def test_rotation_rejects_zero_axis_and_unknown_parameters(self):
+        invalid = [
+            ({"Rotation": {"angle": 30, "axis": [0, 0, 0]}}, "axis"),
+            (
+                {
+                    "Rotation": {
+                        "angle": 30,
+                        "axis": [0, 0, 1],
+                        "seed": 1,
+                    }
+                },
+                "seed",
+            ),
+        ]
+        for block, message in invalid:
+            with (
+                self.subTest(block=block),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                self.module().build_spin_perturbation([block])
+
+
 class TestCanting(unittest.TestCase):
     def module(self):
         from dpgen.data import spin_perturb
@@ -163,7 +235,6 @@ class TestCanting(unittest.TestCase):
             {"Canting": {"angle": 30, "seed": None}},
             {"Canting": {"angle": 30, "Rcut": 0.1}},
             {"Canting": {"angle": 30, "direction": [1, 0, 0]}},
-            {"Rotation": {"angle": 30, "axis": [0, 0, 1]}},
         ]
         for block in invalid:
             with (
