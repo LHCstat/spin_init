@@ -402,9 +402,7 @@ class TestSpinTasks(unittest.TestCase):
         param.write_text(json.dumps(self.jdata))
 
         with mock.patch.object(spin_init, "make_spin_init_structures") as make:
-            with self.assertRaisesRegex(
-                ValueError, r"pert_spin\[0\]\.Rotation\.axis"
-            ):
+            with self.assertRaisesRegex(ValueError, r"pert_spin\[0\]\.Rotation\.axis"):
                 spin_init.gen_spin_init(
                     argparse.Namespace(PARAM=str(param), MACHINE=None)
                 )

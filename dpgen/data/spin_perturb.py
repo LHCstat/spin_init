@@ -245,9 +245,7 @@ def _validate_parameters(parameters, allowed, required, location):
 
 def _canting_variants(parameters, location):
     _validate_parameters(parameters, {"angle", "seed"}, {"angle"}, location)
-    angles = _number_values(
-        parameters["angle"], f"{location}.angle", 0.0, 180.0
-    )
+    angles = _number_values(parameters["angle"], f"{location}.angle", 0.0, 180.0)
     seed = (
         _seed_value(parameters["seed"], f"{location}.seed")
         if "seed" in parameters
@@ -267,9 +265,7 @@ def _canting_variants(parameters, location):
 
 def _rotation_variants(parameters, location):
     _validate_parameters(parameters, {"angle", "axis"}, {"angle", "axis"}, location)
-    angles = _number_values(
-        parameters["angle"], f"{location}.angle", 0.0, 360.0
-    )
+    angles = _number_values(parameters["angle"], f"{location}.angle", 0.0, 360.0)
     axes = _axis_values(parameters["axis"], f"{location}.axis")
     variants = []
     for angle in angles:
@@ -354,16 +350,14 @@ def _rota_cant_variants(parameters, location):
                 variants.append(
                     (
                         name,
-                        lambda moments,
-                        rotation_angle=rotation_angle,
-                        axis=axis,
-                        canting_angle=canting_angle,
-                        rng=rng: rota_cant_moments(
-                            moments,
-                            rotation_angle,
-                            axis,
-                            canting_angle,
-                            rng,
+                        lambda moments, rotation_angle=rotation_angle, axis=axis, canting_angle=canting_angle, rng=rng: (
+                            rota_cant_moments(
+                                moments,
+                                rotation_angle,
+                                axis,
+                                canting_angle,
+                                rng,
+                            )
                         ),
                     )
                 )
@@ -424,9 +418,7 @@ def build_spin_perturbation(pert_spin):
             for parent_name, parent_moments in branches:
                 for local_name, transform in variants:
                     name = (
-                        local_name
-                        if not parent_name
-                        else f"{parent_name}-{local_name}"
+                        local_name if not parent_name else f"{parent_name}-{local_name}"
                     )
                     try:
                         values = _moments_array(transform(parent_moments))

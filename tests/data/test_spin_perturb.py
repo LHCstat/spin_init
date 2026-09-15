@@ -241,9 +241,7 @@ class TestRotaCant(unittest.TestCase):
             np.testing.assert_array_equal(
                 configurations_a[name], configurations_b[name]
             )
-            np.testing.assert_allclose(
-                np.linalg.norm(configurations_a[name][0]), 2.0
-            )
+            np.testing.assert_allclose(np.linalg.norm(configurations_a[name][0]), 2.0)
 
     def test_rota_cant_rejects_missing_invalid_and_unknown_fields(self):
         invalid = [
@@ -293,12 +291,8 @@ class TestOrderedPipeline(unittest.TestCase):
             ["R1-S1", "R1-S2", "R2-S1", "R2-S2"],
         )
         self.assertNotIn("R1", configurations)
-        np.testing.assert_allclose(
-            configurations["R1-S1"], [[0, 0.9, 0]], atol=1e-14
-        )
-        np.testing.assert_allclose(
-            configurations["R1-S2"], [[0, 1.1, 0]], atol=1e-14
-        )
+        np.testing.assert_allclose(configurations["R1-S1"], [[0, 0.9, 0]], atol=1e-14)
+        np.testing.assert_allclose(configurations["R1-S2"], [[0, 1.1, 0]], atol=1e-14)
 
     def test_repeated_modes_compose_in_list_order(self):
         count, provider = self.module().build_spin_perturbation(
@@ -313,9 +307,7 @@ class TestOrderedPipeline(unittest.TestCase):
 
         self.assertEqual(count, 1)
         self.assertEqual(list(configurations), ["R1-C1-R1"])
-        np.testing.assert_allclose(
-            configurations["R1-C1-R1"], [[-1, 0, 0]], atol=1e-14
-        )
+        np.testing.assert_allclose(configurations["R1-C1-R1"], [[-1, 0, 0]], atol=1e-14)
 
     def test_each_item_has_exactly_one_known_operation(self):
         invalid = [
@@ -335,9 +327,7 @@ class TestOrderedPipeline(unittest.TestCase):
                 self.module().build_spin_perturbation([block])
 
     def test_errors_include_operation_index_mode_and_field(self):
-        with self.assertRaisesRegex(
-            ValueError, r"pert_spin\[0\]\.Rotation\.axis"
-        ):
+        with self.assertRaisesRegex(ValueError, r"pert_spin\[0\]\.Rotation\.axis"):
             self.module().build_spin_perturbation(
                 [{"Rotation": {"angle": 30, "axis": [0, 0, 0]}}]
             )
