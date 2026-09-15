@@ -94,18 +94,18 @@ def _single_finite_number(value, label):
     return result
 
 
-def _scale_deltas(pert, pert_step):
-    pert_value = _single_finite_number(pert, "Scale pert")
-    step_value = _single_finite_number(pert_step, "Scale pert_step")
+def _scale_deltas(pert, pert_step, location="Scale"):
+    pert_value = _single_finite_number(pert, f"{location}.pert")
+    step_value = _single_finite_number(pert_step, f"{location}.pert_step")
     if not 0.0 < pert_value < 1.0:
-        raise ValueError("Scale pert must satisfy 0 < pert < 1")
+        raise ValueError(f"{location}.pert must satisfy 0 < pert < 1")
     if step_value <= 0.0:
-        raise ValueError("Scale pert_step must be positive")
+        raise ValueError(f"{location}.pert_step must be positive")
     steps = int(round(pert_value / step_value))
     if steps < 1 or not np.isclose(
         steps * step_value, pert_value, rtol=1e-12, atol=1e-15
     ):
-        raise ValueError("Scale pert / pert_step must be an integer")
+        raise ValueError(f"{location}.pert / pert_step must be an integer")
     negative = [-step_value * index for index in range(steps, 0, -1)]
     positive = [step_value * index for index in range(1, steps + 1)]
     return [float(value) for value in negative + positive]
@@ -210,9 +210,7 @@ def cant_moments(moments, angle, rng=None):
     return result
 
 
-def rota_cant_moments(
-    moments, rotation_angle, axis, canting_angle, rng=None
-):
+def rota_cant_moments(moments, rotation_angle, axis, canting_angle, rng=None):
     """Apply a global Rotation followed by atomwise Canting."""
     rotated = rotate_moments(moments, rotation_angle, axis)
     return cant_moments(rotated, canting_angle, rng=rng)
@@ -222,192 +220,220 @@ def _angle_values(value):
     return _number_values(value, "Canting angle", 0.0, 180.0)
 
 
-def _seed_value(value):
+def _seed_value(value, label="Canting seed"):
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
-        raise ValueError("Canting seed must be a non-negative integer")
+        raise ValueError(f"{label} must be a non-negative integer")
     if value < 0:
-        raise ValueError("Canting seed must be a non-negative integer")
+        raise ValueError(f"{label} must be a non-negative integer")
     return int(value)
 
 
-def build_spin_perturbation(pert_spin):
-    """Validate supported blocks and return ``(count, provider)`` for Stage 4."""
-    if pert_spin is None:
-        return 0, None
-    if not isinstance(pert_spin, list):
-        raise ValueError("pert_spin must be a list of perturbation blocks")
-    if not pert_spin:
-        return 0, None
+def _validate_parameters(parameters, allowed, required, location):
+    if not isinstance(parameters, dict):
+        raise ValueError(f"{location} must be an object")
+    unknown = set(parameters) - set(allowed)
+    if unknown:
+        raise ValueError(
+            f"{location}: unknown parameter(s): {', '.join(sorted(unknown))}"
+        )
+    missing = set(required) - set(parameters)
+    if missing:
+        raise ValueError(
+            f"{location}: missing parameter(s): {', '.join(sorted(missing))}"
+        )
 
-    configurations = []
-    mode_counts = {
-        "Canting": 0,
-        "Rotation": 0,
-        "Rota_Cant": 0,
-        "Random": 0,
-        "Scale": 0,
-    }
-    for block_index, block in enumerate(pert_spin):
-        if not isinstance(block, dict) or not block:
-            raise ValueError(f"pert_spin[{block_index}] must be a nonempty object")
-        if len(block) != 1:
-            raise ValueError(
-                f"pert_spin[{block_index}] must contain exactly one operation"
+
+def _canting_variants(parameters, location):
+    _validate_parameters(parameters, {"angle", "seed"}, {"angle"}, location)
+    angles = _number_values(
+        parameters["angle"], f"{location}.angle", 0.0, 180.0
+    )
+    seed = (
+        _seed_value(parameters["seed"], f"{location}.seed")
+        if "seed" in parameters
+        else None
+    )
+    rng = np.random.default_rng(seed)
+    return [
+        (
+            f"C{index}",
+            lambda moments, angle=angle, rng=rng: cant_moments(
+                moments, angle=angle, rng=rng
+            ),
+        )
+        for index, angle in enumerate(angles, start=1)
+    ]
+
+
+def _rotation_variants(parameters, location):
+    _validate_parameters(parameters, {"angle", "axis"}, {"angle", "axis"}, location)
+    angles = _number_values(
+        parameters["angle"], f"{location}.angle", 0.0, 360.0
+    )
+    axes = _axis_values(parameters["axis"], f"{location}.axis")
+    variants = []
+    for angle in angles:
+        for axis in axes:
+            name = f"R{len(variants) + 1}"
+            variants.append(
+                (
+                    name,
+                    lambda moments, angle=angle, axis=axis: rotate_moments(
+                        moments, angle=angle, axis=axis
+                    ),
+                )
             )
-        mode, parameters = next(iter(block.items()))
-        if not isinstance(parameters, dict):
-            raise ValueError(f"pert_spin[{block_index}].{mode} must be an object")
-        if mode == "Canting":
-            unknown = set(parameters) - {"angle", "seed"}
-            if unknown:
-                raise ValueError(
-                    f"unknown Canting parameter(s): {', '.join(sorted(unknown))}"
-                )
-            missing = {"angle"} - set(parameters)
-            if missing:
-                raise ValueError(
-                    f"missing Canting parameter(s): {', '.join(sorted(missing))}"
-                )
-            angles = _angle_values(parameters["angle"])
-            seed = _seed_value(parameters["seed"]) if "seed" in parameters else None
-            rng = np.random.default_rng(seed)
-            for angle in angles:
-                mode_counts[mode] += 1
-                name = f"C{mode_counts[mode]}"
-                configurations.append(
-                    (name, lambda moments, angle=angle, rng=rng: cant_moments(
-                        moments, angle=angle, rng=rng
-                    ))
-                )
-        elif mode == "Rotation":
-            unknown = set(parameters) - {"angle", "axis"}
-            if unknown:
-                raise ValueError(
-                    f"unknown Rotation parameter(s): {', '.join(sorted(unknown))}"
-                )
-            missing = {"angle", "axis"} - set(parameters)
-            if missing:
-                raise ValueError(
-                    f"missing Rotation parameter(s): {', '.join(sorted(missing))}"
-                )
-            angles = _number_values(
-                parameters["angle"], "Rotation angle", 0.0, 360.0
-            )
-            axes = _axis_values(parameters["axis"], "Rotation axis")
-            for angle in angles:
-                for axis in axes:
-                    mode_counts[mode] += 1
-                    name = f"R{mode_counts[mode]}"
-                    configurations.append(
-                        (name, lambda moments, angle=angle, axis=axis: rotate_moments(
-                            moments, angle=angle, axis=axis
-                        ))
-                    )
-        elif mode == "Random":
-            unknown = set(parameters) - {"num", "seed"}
-            if unknown:
-                raise ValueError(
-                    f"unknown Random parameter(s): {', '.join(sorted(unknown))}"
-                )
-            missing = {"num"} - set(parameters)
-            if missing:
-                raise ValueError(
-                    f"missing Random parameter(s): {', '.join(sorted(missing))}"
-                )
-            number = parameters["num"]
-            if (
-                isinstance(number, (bool, np.bool_))
-                or not isinstance(number, (int, np.integer))
-                or number <= 0
-            ):
-                raise ValueError("Random num must be a positive integer")
-            seed = _seed_value(parameters["seed"]) if "seed" in parameters else None
-            rng = np.random.default_rng(seed)
-            for _ in range(int(number)):
-                mode_counts[mode] += 1
-                name = f"Rand{mode_counts[mode]}"
-                configurations.append(
-                    (name, lambda moments, rng=rng: randomize_moments(moments, rng))
-                )
-        elif mode == "Scale":
-            unknown = set(parameters) - {"pert", "pert_step"}
-            if unknown:
-                raise ValueError(
-                    f"unknown Scale parameter(s): {', '.join(sorted(unknown))}"
-                )
-            missing = {"pert", "pert_step"} - set(parameters)
-            if missing:
-                raise ValueError(
-                    f"missing Scale parameter(s): {', '.join(sorted(missing))}"
-                )
-            for delta in _scale_deltas(
-                parameters["pert"], parameters["pert_step"]
-            ):
-                mode_counts[mode] += 1
-                name = f"S{mode_counts[mode]}"
-                configurations.append(
+    return variants
+
+
+def _random_variants(parameters, location):
+    _validate_parameters(parameters, {"num", "seed"}, {"num"}, location)
+    number = parameters["num"]
+    if (
+        isinstance(number, (bool, np.bool_))
+        or not isinstance(number, (int, np.integer))
+        or number <= 0
+    ):
+        raise ValueError(f"{location}.num must be a positive integer")
+    seed = (
+        _seed_value(parameters["seed"], f"{location}.seed")
+        if "seed" in parameters
+        else None
+    )
+    rng = np.random.default_rng(seed)
+    return [
+        (
+            f"Rand{index}",
+            lambda moments, rng=rng: randomize_moments(moments, rng),
+        )
+        for index in range(1, int(number) + 1)
+    ]
+
+
+def _scale_variants(parameters, location):
+    _validate_parameters(
+        parameters, {"pert", "pert_step"}, {"pert", "pert_step"}, location
+    )
+    deltas = _scale_deltas(
+        parameters["pert"], parameters["pert_step"], location=location
+    )
+    return [
+        (
+            f"S{index}",
+            lambda moments, delta=delta: scale_moments(moments, delta),
+        )
+        for index, delta in enumerate(deltas, start=1)
+    ]
+
+
+def _rota_cant_variants(parameters, location):
+    _validate_parameters(
+        parameters,
+        {"R_angle", "axis", "C_angle", "seed"},
+        {"R_angle", "axis", "C_angle"},
+        location,
+    )
+    rotation_angles = _number_values(
+        parameters["R_angle"], f"{location}.R_angle", 0.0, 360.0
+    )
+    axes = _axis_values(parameters["axis"], f"{location}.axis")
+    canting_angles = _number_values(
+        parameters["C_angle"], f"{location}.C_angle", 0.0, 180.0
+    )
+    seed = (
+        _seed_value(parameters["seed"], f"{location}.seed")
+        if "seed" in parameters
+        else None
+    )
+    rng = np.random.default_rng(seed)
+    variants = []
+    for rotation_angle in rotation_angles:
+        for axis in axes:
+            for canting_angle in canting_angles:
+                name = f"RC{len(variants) + 1}"
+                variants.append(
                     (
                         name,
-                        lambda moments, delta=delta: scale_moments(moments, delta),
+                        lambda moments,
+                        rotation_angle=rotation_angle,
+                        axis=axis,
+                        canting_angle=canting_angle,
+                        rng=rng: rota_cant_moments(
+                            moments,
+                            rotation_angle,
+                            axis,
+                            canting_angle,
+                            rng,
+                        ),
                     )
                 )
-        elif mode == "Rota_Cant":
-            allowed = {"R_angle", "axis", "C_angle", "seed"}
-            unknown = set(parameters) - allowed
-            if unknown:
-                raise ValueError(
-                    f"unknown Rota_Cant parameter(s): {', '.join(sorted(unknown))}"
-                )
-            missing = {"R_angle", "axis", "C_angle"} - set(parameters)
-            if missing:
-                raise ValueError(
-                    f"missing Rota_Cant parameter(s): {', '.join(sorted(missing))}"
-                )
-            rotation_angles = _number_values(
-                parameters["R_angle"], "Rota_Cant R_angle", 0.0, 360.0
-            )
-            axes = _axis_values(parameters["axis"], "Rota_Cant axis")
-            canting_angles = _number_values(
-                parameters["C_angle"], "Rota_Cant C_angle", 0.0, 180.0
-            )
-            seed = _seed_value(parameters["seed"]) if "seed" in parameters else None
-            rng = np.random.default_rng(seed)
-            for rotation_angle in rotation_angles:
-                for axis in axes:
-                    for canting_angle in canting_angles:
-                        mode_counts[mode] += 1
-                        name = f"RC{mode_counts[mode]}"
-                        configurations.append(
-                            (
-                                name,
-                                lambda moments,
-                                rotation_angle=rotation_angle,
-                                axis=axis,
-                                canting_angle=canting_angle,
-                                rng=rng: rota_cant_moments(
-                                    moments,
-                                    rotation_angle,
-                                    axis,
-                                    canting_angle,
-                                    rng,
-                                ),
-                            )
-                        )
-        else:
-            raise NotImplementedError(f"spin perturbation mode {mode!r} is not implemented")
+    return variants
 
-    def provider(moments, count):
-        if count != len(configurations):
+
+_OPERATION_COMPILERS = {
+    "Rotation": _rotation_variants,
+    "Canting": _canting_variants,
+    "Rota_Cant": _rota_cant_variants,
+    "Random": _random_variants,
+    "Scale": _scale_variants,
+}
+
+
+def _compile_operations(pert_spin):
+    if pert_spin is None:
+        return []
+    if not isinstance(pert_spin, list):
+        raise ValueError("pert_spin must be a list of perturbation blocks")
+    operations = []
+    for block_index, block in enumerate(pert_spin):
+        block_location = f"pert_spin[{block_index}]"
+        if not isinstance(block, dict) or not block:
+            raise ValueError(f"{block_location} must be a nonempty object")
+        if len(block) != 1:
+            raise ValueError(f"{block_location} must contain exactly one operation")
+        mode, parameters = next(iter(block.items()))
+        location = f"{block_location}.{mode}"
+        try:
+            compiler = _OPERATION_COMPILERS[mode]
+        except KeyError as error:
+            raise NotImplementedError(
+                f"{block_location}: spin perturbation mode {mode!r} is not implemented"
+            ) from error
+        operations.append(compiler(parameters, location))
+    return operations
+
+
+def build_spin_perturbation(pert_spin):
+    """Compile an ordered operation list into the Stage 4 provider contract."""
+    operations = _compile_operations(pert_spin)
+    if not operations:
+        return 0, None
+    count = 1
+    for variants in operations:
+        count *= len(variants)
+
+    def provider(moments, requested_count):
+        if requested_count != count:
             raise ValueError(
-                f"Canting provider expected {len(configurations)} configurations, "
-                f"received {count}"
+                f"spin provider expected {count} configurations, "
+                f"received {requested_count}"
             )
-        perturbed = {}
-        for name, transform in configurations:
-            try:
-                perturbed[name] = transform(moments)
-            except ValueError as error:
-                raise ValueError(f"{name}: {error}") from error
-        return perturbed
+        branches = [("", _moments_array(moments))]
+        for variants in operations:
+            expanded = []
+            for parent_name, parent_moments in branches:
+                for local_name, transform in variants:
+                    name = (
+                        local_name
+                        if not parent_name
+                        else f"{parent_name}-{local_name}"
+                    )
+                    try:
+                        values = _moments_array(transform(parent_moments))
+                    except ValueError as error:
+                        raise ValueError(f"{name}: {error}") from error
+                    expanded.append((name, values))
+            branches = expanded
+        return {name: values for name, values in branches}
 
-    return len(configurations), provider
+    return count, provider

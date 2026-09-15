@@ -271,6 +271,102 @@ class TestRotaCant(unittest.TestCase):
                 self.module().build_spin_perturbation([{"Rota_Cant": parameters}])
 
 
+class TestOrderedPipeline(unittest.TestCase):
+    def module(self):
+        from dpgen.data import spin_perturb
+
+        return spin_perturb
+
+    def test_operations_expand_branches_and_emit_only_final_leaves(self):
+        count, provider = self.module().build_spin_perturbation(
+            [
+                {"Rotation": {"angle": [90, 180], "axis": [0, 0, 1]}},
+                {"Scale": {"pert": 0.1, "pert_step": 0.1}},
+            ]
+        )
+
+        configurations = provider(np.array([[1.0, 0.0, 0.0]]), count)
+
+        self.assertEqual(count, 4)
+        self.assertEqual(
+            list(configurations),
+            ["R1-S1", "R1-S2", "R2-S1", "R2-S2"],
+        )
+        self.assertNotIn("R1", configurations)
+        np.testing.assert_allclose(
+            configurations["R1-S1"], [[0, 0.9, 0]], atol=1e-14
+        )
+        np.testing.assert_allclose(
+            configurations["R1-S2"], [[0, 1.1, 0]], atol=1e-14
+        )
+
+    def test_repeated_modes_compose_in_list_order(self):
+        count, provider = self.module().build_spin_perturbation(
+            [
+                {"Rotation": {"angle": 90, "axis": [0, 0, 1]}},
+                {"Canting": {"angle": 0, "seed": 1}},
+                {"Rotation": {"angle": 90, "axis": [0, 0, 1]}},
+            ]
+        )
+
+        configurations = provider(np.array([[1.0, 0.0, 0.0]]), count)
+
+        self.assertEqual(count, 1)
+        self.assertEqual(list(configurations), ["R1-C1-R1"])
+        np.testing.assert_allclose(
+            configurations["R1-C1-R1"], [[-1, 0, 0]], atol=1e-14
+        )
+
+    def test_each_item_has_exactly_one_known_operation(self):
+        invalid = [
+            {},
+            {
+                "Rotation": {"angle": 30, "axis": [0, 0, 1]},
+                "Scale": {"pert": 0.1, "pert_step": 0.1},
+            },
+            {"rotation": {"angle": 30, "axis": [0, 0, 1]}},
+            "Canting",
+        ]
+        for block in invalid:
+            with (
+                self.subTest(block=block),
+                self.assertRaises((ValueError, NotImplementedError)),
+            ):
+                self.module().build_spin_perturbation([block])
+
+    def test_errors_include_operation_index_mode_and_field(self):
+        with self.assertRaisesRegex(
+            ValueError, r"pert_spin\[0\]\.Rotation\.axis"
+        ):
+            self.module().build_spin_perturbation(
+                [{"Rotation": {"angle": 30, "axis": [0, 0, 0]}}]
+            )
+
+    def test_stochastic_state_is_reproducible_across_branches_and_snapshots(self):
+        parameters = [
+            {"Rotation": {"angle": [0, 90], "axis": [0, 0, 1]}},
+            {"Canting": {"angle": [30, 60], "seed": 2468}},
+            {"Random": {"num": 2, "seed": 1357}},
+        ]
+        count_a, provider_a = self.module().build_spin_perturbation(parameters)
+        count_b, provider_b = self.module().build_spin_perturbation(parameters)
+        moments = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]])
+
+        first_a = provider_a(moments, count_a)
+        next_a = provider_a(moments, count_a)
+        first_b = provider_b(moments, count_b)
+        next_b = provider_b(moments, count_b)
+
+        self.assertEqual(count_a, 8)
+        self.assertEqual(list(first_a), list(first_b))
+        for name in first_a:
+            np.testing.assert_array_equal(first_a[name], first_b[name])
+            np.testing.assert_array_equal(next_a[name], next_b[name])
+        self.assertTrue(
+            any(not np.array_equal(first_a[name], next_a[name]) for name in first_a)
+        )
+
+
 class TestCanting(unittest.TestCase):
     def module(self):
         from dpgen.data import spin_perturb
@@ -369,7 +465,7 @@ class TestCanting(unittest.TestCase):
             np.testing.assert_allclose(np.linalg.norm(perturbed), 2.0)
             np.testing.assert_allclose(perturbed[2] / 2.0, expected_cosine, atol=1e-14)
 
-    def test_multiple_canting_blocks_continue_configuration_numbering(self):
+    def test_multiple_canting_blocks_compose_in_pipeline_order(self):
         count, provider = self.module().build_spin_perturbation(
             [
                 {"Canting": {"angle": 10, "seed": 1}},
@@ -379,8 +475,8 @@ class TestCanting(unittest.TestCase):
 
         configurations = provider(np.array([[0, 0, 1.0]]), count)
 
-        self.assertEqual(count, 3)
-        self.assertEqual(list(configurations), ["C1", "C2", "C3"])
+        self.assertEqual(count, 2)
+        self.assertEqual(list(configurations), ["C1-C1", "C1-C2"])
 
     def test_seed_is_optional(self):
         count, provider = self.module().build_spin_perturbation(
