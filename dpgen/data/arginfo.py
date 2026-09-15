@@ -138,7 +138,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 list[dict],
                 optional=True,
                 default=[],
-                doc="Magnetic perturbation blocks. Canting supports angle and optional seed.",
+                doc="Ordered magnetic perturbation pipeline. Each item contains exactly one of Rotation, Canting, Rota_Cant, Random, or Scale.",
             ),
             Argument(
                 "spin_action",

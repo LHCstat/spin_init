@@ -114,12 +114,11 @@ LCHARG = .FALSE.
   "md_incar": "./INCAR.md",
   "md_nstep": 3,
   "spin_incar": "./INCAR.spin",
-  "pert_spin": [{
-    "Canting": {
-      "angle": [30, 60],
-      "seed": 12345
-    }
-  }],
+  "pert_spin": [
+    {"Rotation": {"angle": 45, "axis": [0, 0, 1]}},
+    {"Canting": {"angle": [30, 60], "seed": 12345}},
+    {"Scale": {"pert": 0.10, "pert_step": 0.10}}
+  ],
   "spin_action": "make_run",
   "potcars": ["./POTCAR"]
 }
@@ -130,15 +129,17 @@ stage-4 新字段：
 | 字段 | 含义 |
 | --- | --- |
 | `spin_incar` | 磁性静态 INCAR 模板路径 |
-| `pert_spin` | 磁矩扰动模式列表；当前支持 `Canting` |
+| `pert_spin` | 有序磁矩操作列表；支持 `Rotation`、`Canting`、`Rota_Cant`、`Random`、`Scale` |
 | `spin_pert_numb` | 内部兼容字段；用户应省略或保持为 `0` |
 | `spin_action` | `make`、`run` 或 `make_run` |
 
 `spin_action=make` 只生成 `03.spin`；`run` 只提交已存在的 `03.spin`，并要求提供
 MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE 时只生成。
 
-每个快照保留输入磁矩不变的基准构型 `000000`，Canting 组合依次命名为 `C1`、
-`C2`……。
+每个快照保留输入磁矩不变的基准构型 `000000`。`pert_spin` 每项必须且只能包含一个
+模式，按列表顺序执行，允许重复模式。每一步都对当前全部分支做笛卡尔展开，只输出
+最终叶子。局部名称分别为 `R#`、`C#`、`RC#`、`Rand#`、`S#`，组合名称按执行顺序
+用 `-` 连接，例如 `R1-C2-S1`。
 
 ### Canting 参数和数学定义
 
@@ -159,6 +160,55 @@ a' = |a| [cos(angle) a_hat + sin(angle) (cos(phi) e1 + sin(phi) e2)]
 `seed` 可省略，也可以写成非负整数。相同 seed、输入和任务顺序会复现完整的随机
 构型序列；省略 seed 时，每次运行产生新的随机结果。旧的 `Rcut` 和 `direction`
 参数不再接受。
+
+### Rotation、Rota_Cant、Random 和 Scale
+
+`Rotation` 的 `angle` 可以是 `[0,360]` 内的一个数或非空列表；`axis` 可以是一个
+非零三维向量或向量列表。程序按 `angle × axis` 生成局部变体，并按右手定则使用
+Rodrigues 公式绕全局轴旋转所有磁矩。零磁矩不变，非零磁矩模长不变。
+
+```json
+{"Rotation": {"angle": [45, 90], "axis": [[0, 0, 1], [0, 1, 0]]}}
+```
+
+`Rota_Cant` 是固定顺序的组合操作：先 Rotation，再相对于旋转后的磁矩做 Canting。
+它按 `R_angle × axis × C_angle` 的顺序生成所有组合，并支持可选非负整数 `seed`。
+
+```json
+{"Rota_Cant": {
+  "R_angle": [30, 60],
+  "axis": [[0, 1, 0], [0, 0, 1]],
+  "C_angle": [45, 90],
+  "seed": 12345
+}}
+```
+
+`Random` 的 `num` 是正整数，表示生成多少组随机方向。每一组中，每个非零原子独立
+均匀采样一个球面方向，并乘回该原子的原始磁矩模长；零磁矩保持为零。
+
+```json
+{"Random": {"num": 5, "seed": 12345}}
+```
+
+`Scale` 只改变模长，使用相对放缩 `m' = (1 + delta) m`。要求 `0 < pert < 1`、
+`pert_step > 0`，且 `pert / pert_step` 必须是整数。增量从 `-pert` 到 `+pert`，先负后
+正并排除零。例如 `pert=0.25`、`pert_step=0.05` 产生 10 个局部变体。
+
+```json
+{"Scale": {"pert": 0.25, "pert_step": 0.05}}
+```
+
+每个 Canting、Rota_Cant 或 Random 操作各自拥有一个 RNG。它不会为每个原子、变体、
+父分支或 snapshot 重新设 seed，而是按稳定顺序连续推进。
+
+例如 Rotation 有 2 个 angle 和 2 个 axis、Canting 有 2 个 angle、Scale 使用上述
+10 个增量时，共产生 `4 × 2 × 10 = 80` 个最终扰动构型，另加 `000000`。代表路径为：
+
+```text
+03.spin/.../000000/INCAR
+03.spin/.../R1-C1-S1/INCAR
+03.spin/.../R4-C2-S10/INCAR
+```
 
 ## machine.json 编写方式
 
@@ -245,8 +295,8 @@ out_dir/
     ├── tasks.json
     └── scale-1.000/000000/00/
         ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        ├── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        └── R1-C2-S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。用户配置的
@@ -272,8 +322,5 @@ dpgen spin_init spin-init.json machine.json
 
 ## 当前未实现内容
 
-- Rotation、Rotation & Canting、Random、Scale 的物理扰动规则；
 - 磁矩 RMSE 筛选；
 - DeepMD 的 `spin.npy`、`spin_force.npy` 数据转换。
-
-这些功能需要先确定扰动参数及数学定义，之后可接入已预留的命名与任务展开接口。

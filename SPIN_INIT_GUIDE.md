@@ -13,9 +13,9 @@ POSCAR
   → 03.spin：每个快照的非共线磁性静态 VASP task
 ```
 
-这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、Canting 磁矩扰动、
-目录生成、符号链接、dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。输入磁矩不变的
-基准构型命名为 `000000`，Canting 组合命名为 `C1`、`C2`……。
+这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、五种磁矩操作的有序
+组合、目录生成、符号链接、dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。输入磁矩
+不变的基准构型始终命名为 `000000`。
 
 ## 2. 安装与检查
 
@@ -89,25 +89,37 @@ LCHARG = .FALSE.
   "md_incar": "./INCAR.md",
   "md_nstep": 3,
   "spin_incar": "./INCAR.spin",
-  "pert_spin": [{
-    "Canting": {
-      "angle": [30, 60],
-      "seed": 12345
-    }
-  }],
+  "pert_spin": [
+    {"Rotation": {"angle": 45, "axis": [0, 0, 1]}},
+    {"Canting": {"angle": [30, 60], "seed": 12345}},
+    {"Scale": {"pert": 0.10, "pert_step": 0.10}}
+  ],
   "spin_action": "make_run",
   "potcars": ["./POTCAR"]
 }
 ```
 
-`angle` 是扰动后磁矩与初始磁矩的夹角，单位为度，必须位于 `[0, 180]`。它可以是
-单个数或列表；上例生成 `C1`、`C2` 两个 Canting 构型。每个非零原子的方位角在
-`[0, 2π)` 内独立均匀采样，磁矩模长保持不变，零磁矩保持不变。
-`angle=0` 精确保留原磁矩，`angle=180` 精确反转非零磁矩；这两个端点不消耗随机数。
+`pert_spin` 是有序操作列表：每项必须且只能写一个模式，按列表顺序依次执行；同一模式
+可以重复。每一步都会对已有全部分支做笛卡尔展开，只把最终叶子写入 `03.spin`。上例
+产生 `1 × 2 × 2 = 4` 个最终构型：`R1-C1-S1` 到 `R1-C2-S2`，另有基准 `000000`。
 
-`seed` 是可选的非负整数。给定相同 seed、输入和任务顺序时，整个随机构型序列可以
-复现；省略 seed 时，每次运行产生不同的随机方位角。旧参数 `Rcut` 和 `direction`
-不再接受。`spin_pert_numb` 是内部字段，用户应省略。
+五种模式如下：
+
+- `Rotation`：`angle` 为 `[0,360]` 内的数或列表，`axis` 为非零三维轴或轴列表；按右手
+  定则用 Rodrigues 公式旋转所有磁矩，局部命名为 `R1`、`R2`……。
+- `Canting`：`angle` 为 `[0,180]` 内的数或列表；每个非零原子独立随机方位角并保持
+  模长，局部命名为 `C1`、`C2`……。0° 和 180° 不消耗随机数。
+- `Rota_Cant`：参数为 `R_angle`、`axis`、`C_angle` 和可选 `seed`；固定先 Rotation
+  再 Canting，组合顺序是 `R_angle × axis × C_angle`，局部名为 `RC1`……。
+- `Random`：正整数 `num` 表示输出组数；每组为每个非零原子独立均匀采样球面方向，
+  保持各自模长，局部名为 `Rand1`……。
+- `Scale`：要求 `0 < pert < 1`、`pert_step > 0` 且二者之比为整数；按从负到正、排除
+  零的相对增量生成 `S1`……，计算式为 `m' = (1 + delta) m`。
+
+Canting、Rota_Cant、Random 的 `seed` 是可选非负整数。每个随机操作拥有一个 RNG，按
+父分支、局部变体、原子和后续 snapshot 的稳定顺序连续推进；相同 seed、输入和任务
+顺序可复现完整序列。所有模式都让零磁矩保持为零。旧 Canting 参数 `Rcut`、
+`direction` 不再接受；`spin_pert_numb` 是内部字段，用户应省略。
 
 ## 4. machine.json
 
@@ -188,12 +200,12 @@ run_spin/
 │   └── 02/POSCAR
 └── 03.spin/scale-1.000/000000/00/
     ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    ├── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    └── R1-C2-S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
-是普通独立文件，每个 `C1`、`C2` 等目录写入对应的 MAGMOM/M_CONSTR。
+是普通独立文件，每个组合目录写入对应的 MAGMOM/M_CONSTR。
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。
 
@@ -209,8 +221,7 @@ stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICA
 - DPCloudServerContext 报 `name 'oss2' is not defined` 时，安装
   `dpdispatcher[bohrium]`。当前代码会在提交前给出明确提示。
 
-## 8. 当前 TODO
+## 8. 后续工作
 
-- 根据后续数学定义实现 Rotation、Rotation & Canting、Random、Scale；
 - 实现磁矩 RMSE 筛选；
 - 转换 DeepMD 的 `spin.npy`、`spin_force.npy`。

@@ -23,12 +23,28 @@
     "spin_incar": "./INCAR.spin",
     "pert_spin": [
         {
+            "Rotation": {
+                "angle": 45,
+                "axis": [
+                    0,
+                    0,
+                    1
+                ]
+            }
+        },
+        {
             "Canting": {
                 "angle": [
                     30,
                     60
                 ],
                 "seed": 12345
+            }
+        },
+        {
+            "Scale": {
+                "pert": 0.1,
+                "pert_step": 0.1
             }
         }
     ],

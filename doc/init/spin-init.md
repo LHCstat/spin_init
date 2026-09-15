@@ -34,12 +34,11 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
   "md_incar": "INCAR.md",
   "md_nstep": 3,
   "spin_incar": "INCAR.spin",
-  "pert_spin": [{
-    "Canting": {
-      "angle": [30, 60],
-      "seed": 12345
-    }
-  }],
+  "pert_spin": [
+    {"Rotation": {"angle": 45, "axis": [0, 0, 1]}},
+    {"Canting": {"angle": [30, 60], "seed": 12345}},
+    {"Scale": {"pert": 0.10, "pert_step": 0.10}}
+  ],
   "spin_action": "make_run",
   "potcars": ["POTCAR"]
 }
@@ -52,29 +51,42 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
 - `make_run`: create the tasks and submit them when MACHINE is supplied, or
   only create them when MACHINE is omitted.
 
-`pert_spin` currently supports the `Canting` mode. `angle` is the angle in
-degrees between the initial and perturbed moments and accepts one value or a
-list in the inclusive range `[0, 180]`. Each value creates one configuration,
-named `C1`, `C2`, and so on. The original moments remain available as
-`000000`.
+`pert_spin` is an ordered operation pipeline. Every list item must contain
+exactly one mode, items run from first to last, and repeated modes are allowed.
+Each operation expands every current branch over its local parameter variants;
+only final leaves are written. The example therefore creates
+`1 Rotation * 2 Canting * 2 Scale = 4` perturbed configurations, named
+`R1-C1-S1` through `R1-C2-S2`, plus the unchanged `000000` baseline.
 
-For each nonzero initial moment **a**, Canting independently samples a uniform
-azimuth `phi` in `[0, 2*pi)` around **a**, while keeping the requested polar
-angle and the original magnitude. In an orthonormal basis **e1**, **e2** of the
-plane normal to **a**, the result is
-`|a| * (cos(angle) * a_hat + sin(angle) * (cos(phi) * e1 + sin(phi) * e2))`.
-Zero moments remain zero.
-The exact endpoints do not consume random numbers: zero degrees returns the
-original moments and 180 degrees reverses every nonzero moment.
+Supported modes are:
 
-The optional `seed` must be a non-negative integer. The same seed, inputs, and
-task order reproduce the complete configuration sequence; omitting it produces
-a new sequence on each run. The former `Rcut` and `direction` parameters are
-rejected.
+- `Rotation`: `angle` is one value or list in `[0, 360]`; `axis` is one
+  nonzero global 3-vector or a list of vectors. Variants use
+  `angle * axis` order and Rodrigues' right-hand-rule rotation.
+- `Canting`: `angle` is one value or list in `[0, 180]`. Every nonzero atom
+  independently samples an azimuth `phi` in `[0, 2*pi)` and keeps its norm:
+  `|m| * (cos(angle) m_hat + sin(angle) (cos(phi) e1 + sin(phi) e2))`.
+  Exact 0 and 180 degree endpoints consume no random values.
+- `Rota_Cant`: accepts `R_angle`, `axis`, `C_angle`, and optional `seed`.
+  Its Cartesian variants use `R_angle * axis * C_angle` order and always
+  apply Rotation before Canting.
+- `Random`: positive integer `num` generates that many configurations. Every
+  nonzero atom receives an independent direction uniformly sampled on the
+  sphere while retaining its input norm.
+- `Scale`: `0 < pert < 1`, positive `pert_step`, and integer
+  `pert / pert_step`. It emits nonzero deltas from `-pert` to `+pert` and
+  applies `m' = (1 + delta) m`; negative variants precede positive variants.
 
-`spin_pert_numb` is an internal compatibility field and should be left at its
-default zero. Rotation, combined Rotation/Canting, Random, and Scale modes are
-not implemented yet and are rejected rather than silently ignored.
+Canting, Rota_Cant, and Random accept an optional non-negative integer `seed`.
+Each stochastic operation owns one generator that advances through parent
+branches, local variants, atoms, and later snapshots in stable order. The same
+seed, inputs, and task order reproduce the complete sequence; omitted seeds are
+nondeterministic. Zero moments always stay zero. The former Canting `Rcut` and
+`direction` fields are rejected.
+
+Local names are `R#`, `C#`, `RC#`, `Rand#`, and `S#`; composed names join
+these tokens in execution order with `-`. `spin_pert_numb` remains an internal
+compatibility field and should be omitted or left at zero.
 
 The output root is `out_dir` exactly; no suffix is appended. Each stage refuses
 to overwrite its existing directory. There is no `sys-*` layer because this
@@ -85,7 +97,7 @@ workflow accepts one initial POSCAR.
 01.md/scale-1.000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,XDATCAR}
 02.disp/scale-1.000/000000/00/POSCAR
 03.spin/scale-1.000/000000/00/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
-03.spin/scale-1.000/000000/00/C1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/R1-C1-S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 ```
 
 Task-level POSCAR and POTCAR files in `01.md` and `03.spin` are real relative
