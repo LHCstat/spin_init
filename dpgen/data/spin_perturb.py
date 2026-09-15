@@ -73,11 +73,9 @@ def _axis_values(value, label):
         raise ValueError(f"{label} must be a finite 3-vector or nonempty list")
     units = []
     for index, axis in enumerate(array):
-        unit, magnitude = _unit_and_magnitude(axis)
+        unit, _ = _unit_and_magnitude(axis)
         if unit is None:
             raise ValueError(f"{label}[{index}] must be nonzero")
-        if not np.isfinite(magnitude):
-            raise ValueError(f"{label}[{index}] magnitude is too large")
         units.append(unit)
     return units
 

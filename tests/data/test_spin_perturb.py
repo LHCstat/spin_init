@@ -47,6 +47,13 @@ class TestRotation(unittest.TestCase):
             atol=1e-14,
         )
 
+    def test_extreme_finite_axis_normalizes_without_overflow(self):
+        actual = self.module().rotate_moments(
+            [[1.0, 0.0, 0.0]], 120, [1.7e308, 1.7e308, 1.7e308]
+        )
+
+        np.testing.assert_allclose(actual, [[0.0, 1.0, 0.0]], atol=1e-14)
+
     def test_rotation_cartesian_product_is_angle_outer_axis_inner(self):
         count, provider = self.module().build_spin_perturbation(
             [
