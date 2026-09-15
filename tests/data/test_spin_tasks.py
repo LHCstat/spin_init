@@ -155,17 +155,12 @@ class TestSpinTasks(unittest.TestCase):
                 module.plan_spin_tasks(self.jdata, {}, perturb=lambda m, n: {name: m})
         self.assertFalse((self.root / "03.spin").exists())
 
-    def test_canting_failure_identifies_snapshot_config_and_atom(self):
+    def test_deprecated_canting_parameters_are_rejected_before_task_planning(self):
         from dpgen.data.spin_perturb import build_spin_perturbation
 
-        module = self.module()
-        count, provider = build_spin_perturbation(
-            [{"Canting": {"angle": 30, "Rcut": 3.0}}]
-        )
-        self.jdata["spin_pert_numb"] = count
-
-        with self.assertRaisesRegex(ValueError, "POSCAR.*C1.*atom 0.*Rcut"):
-            module.plan_spin_tasks(self.jdata, {}, perturb=provider)
+        with self.assertRaisesRegex(ValueError, "Rcut"):
+            build_spin_perturbation([{"Canting": {"angle": 30, "Rcut": 0.5}}])
+        self.assertFalse((self.root / "03.spin").exists())
 
     def test_missing_snapshot_and_reserved_forward_file_fail_before_writing(self):
         module = self.module()
@@ -355,8 +350,7 @@ class TestSpinTasks(unittest.TestCase):
             {
                 "Canting": {
                     "angle": [30, 60],
-                    "Rcut": [0.4, 0.5],
-                    "direction": [[1, 0, 0], [0, 1, 0]],
+                    "seed": 12345,
                 }
             }
         ]
@@ -367,10 +361,10 @@ class TestSpinTasks(unittest.TestCase):
 
         generated_jdata, _ = make.call_args.args
         provider = make.call_args.kwargs["perturb"]
-        self.assertEqual(generated_jdata["spin_pert_numb"], 8)
+        self.assertEqual(generated_jdata["spin_pert_numb"], 2)
         self.assertEqual(
-            list(provider(np.array([[0, 0, 1.0]]), 8)),
-            [f"C{index}" for index in range(1, 9)],
+            list(provider(np.array([[0, 0, 1.0]]), 2)),
+            ["C1", "C2"],
         )
 
     def test_invalid_spin_mode_fails_before_an_earlier_stage_runs(self):

@@ -37,8 +37,7 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
   "pert_spin": [{
     "Canting": {
       "angle": [30, 60],
-      "Rcut": [0.4, 0.5],
-      "direction": [[1, 0, 0], [0, 1, 0]]
+      "seed": 12345
     }
   }],
   "spin_action": "make_run",
@@ -53,20 +52,25 @@ finite Cartesian components for every atom in the POSCAR. It must also enable
 - `make_run`: create the tasks and submit them when MACHINE is supplied, or
   only create them when MACHINE is omitted.
 
-`pert_spin` currently supports the `Canting` mode. Scalar values or lists are
-accepted for `angle` (degrees) and `Rcut`; `direction` accepts one Cartesian
-3-vector, a list of 3-vectors, or may be omitted. Parameter lists are expanded
-as a Cartesian product and named `C1`, `C2`, and so on. The original moments
-remain available as `000000`.
+`pert_spin` currently supports the `Canting` mode. `angle` is the angle in
+degrees between the initial and perturbed moments and accepts one value or a
+list in the inclusive range `[0, 180]`. Each value creates one configuration,
+named `C1`, `C2`, and so on. The original moments remain available as
+`000000`.
 
-For each nonzero initial moment **a**, Canting projects `direction` into the
-plane normal to **a**, rotates that projected direction counterclockwise by
-`angle` using the right-hand rule around **a**, and gives it length `Rcut`. The
-component along **a** is shortened so that the final moment has the same norm as
-the original. Zero moments remain zero. If `direction` is omitted or its
-projection vanishes, the Cartesian x/y/z axis least parallel to **a** is chosen
-deterministically. `Rcut` may not exceed the magnitude of any affected nonzero
-moment.
+For each nonzero initial moment **a**, Canting independently samples a uniform
+azimuth `phi` in `[0, 2*pi)` around **a**, while keeping the requested polar
+angle and the original magnitude. In an orthonormal basis **e1**, **e2** of the
+plane normal to **a**, the result is
+`|a| * (cos(angle) * a_hat + sin(angle) * (cos(phi) * e1 + sin(phi) * e2))`.
+Zero moments remain zero.
+The exact endpoints do not consume random numbers: zero degrees returns the
+original moments and 180 degrees reverses every nonzero moment.
+
+The optional `seed` must be a non-negative integer. The same seed, inputs, and
+task order reproduce the complete configuration sequence; omitting it produces
+a new sequence on each run. The former `Rcut` and `direction` parameters are
+rejected.
 
 `spin_pert_numb` is an internal compatibility field and should be left at its
 default zero. Rotation, combined Rotation/Canting, Random, and Scale modes are

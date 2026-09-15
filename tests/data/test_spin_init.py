@@ -91,7 +91,7 @@ class TestSpinInitArginfo(unittest.TestCase):
                 {
                     "Canting": {
                         "angle": [30, 60],
-                        "Rcut": 0.4,
+                        "seed": 12345,
                     }
                 }
             ],
@@ -99,7 +99,7 @@ class TestSpinInitArginfo(unittest.TestCase):
 
         normalized = normalize(data_arginfo.spin_init_jdata_arginfo(), parameters)
 
-        self.assertEqual(normalized["pert_spin"][0]["Canting"]["Rcut"], 0.4)
+        self.assertEqual(normalized["pert_spin"][0]["Canting"]["seed"], 12345)
 
     def test_normalizes_fp_machine_parameters(self):
         self.assertTrue(hasattr(data_arginfo, "spin_init_mdata_arginfo"))

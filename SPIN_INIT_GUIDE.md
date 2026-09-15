@@ -92,8 +92,7 @@ LCHARG = .FALSE.
   "pert_spin": [{
     "Canting": {
       "angle": [30, 60],
-      "Rcut": [0.4, 0.5],
-      "direction": [[1, 0, 0], [0, 1, 0]]
+      "seed": 12345
     }
   }],
   "spin_action": "make_run",
@@ -101,10 +100,14 @@ LCHARG = .FALSE.
 }
 ```
 
-`angle`、`Rcut`、`direction` 的多值按笛卡尔积展开，上例生成 8 个 Canting 构型。
-`direction` 可省略；零磁矩保持不变。direction 缺省、为零或与当前磁矩平行时，程序
-从 x→y→z 中确定性地选择与磁矩最不平行的轴。Canting 保持每个非零磁矩的模长，且
-要求 `Rcut` 不大于该磁矩原始模长。`spin_pert_numb` 是内部字段，用户应省略。
+`angle` 是扰动后磁矩与初始磁矩的夹角，单位为度，必须位于 `[0, 180]`。它可以是
+单个数或列表；上例生成 `C1`、`C2` 两个 Canting 构型。每个非零原子的方位角在
+`[0, 2π)` 内独立均匀采样，磁矩模长保持不变，零磁矩保持不变。
+`angle=0` 精确保留原磁矩，`angle=180` 精确反转非零磁矩；这两个端点不消耗随机数。
+
+`seed` 是可选的非负整数。给定相同 seed、输入和任务顺序时，整个随机构型序列可以
+复现；省略 seed 时，每次运行产生不同的随机方位角。旧参数 `Rcut` 和 `direction`
+不再接受。`spin_pert_numb` 是内部字段，用户应省略。
 
 ## 4. machine.json
 

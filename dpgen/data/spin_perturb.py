@@ -1,11 +1,8 @@
 """Magnetic-moment perturbations for ``spin_init`` Stage 4."""
 
-from itertools import product
-
 import numpy as np
 
 _CARTESIAN_AXES = np.eye(3)
-_COLLINEAR_TOLERANCE = 8 * np.finfo(float).eps
 
 
 def _unit_and_magnitude(vector):
@@ -38,37 +35,26 @@ def _fallback_direction(unit_moment):
     return _CARTESIAN_AXES[index]
 
 
-def cant_moments(moments, angle, rcut, direction=None):
-    """Cant every nonzero moment while preserving its original magnitude."""
+def cant_moments(moments, angle, rng=None):
+    """Cant every nonzero moment by ``angle`` with random atomwise azimuths."""
     result = _moments_array(moments)
-    if isinstance(angle, (bool, np.bool_)) or isinstance(rcut, (bool, np.bool_)):
-        raise ValueError("Canting angle and Rcut must be numeric, not boolean")
-    try:
-        angle = float(angle)
-        rcut = float(rcut)
-    except (TypeError, ValueError) as error:
-        raise ValueError("Canting angle and Rcut must be numeric") from error
-    if not np.isfinite(angle):
-        raise ValueError("Canting angle must be finite")
-    if not np.isfinite(rcut) or rcut < 0:
-        raise ValueError("Canting Rcut must be a finite non-negative number")
-
-    supplied_direction = None
-    if direction is not None:
-        try:
-            supplied_direction = np.asarray(direction, dtype=float)
-        except (TypeError, ValueError) as error:
-            raise ValueError("Canting direction must be numeric") from error
-        if (
-            supplied_direction.shape != (3,)
-            or not np.isfinite(supplied_direction).all()
-        ):
-            raise ValueError("Canting direction must be one finite 3-vector")
-        supplied_direction, _ = _unit_and_magnitude(supplied_direction)
+    if np.asarray(angle, dtype=object).ndim != 0:
+        raise ValueError("cant_moments angle must be one scalar value")
+    angle = _angle_values(angle)[0]
+    if angle == 0.0:
+        return result
+    if angle == 180.0:
+        nonzero = np.any(result != 0.0, axis=1)
+        result[nonzero] = -result[nonzero]
+        return result
+    if rng is None:
+        rng = np.random.default_rng()
+    if not callable(getattr(rng, "uniform", None)):
+        raise ValueError("Canting rng must provide uniform(low, high)")
 
     radians = np.deg2rad(angle)
-    cosine = np.cos(radians)
-    sine = np.sin(radians)
+    polar_cosine = np.cos(radians)
+    polar_sine = np.sin(radians)
     for atom_index, moment in enumerate(result):
         unit_moment, magnitude = _unit_and_magnitude(moment)
         if unit_moment is None:
@@ -77,68 +63,43 @@ def cant_moments(moments, angle, rcut, direction=None):
             raise ValueError(
                 f"atom {atom_index}: magnetic-moment magnitude is too large"
             )
-        if rcut > magnitude:
-            raise ValueError(
-                f"atom {atom_index}: Rcut={rcut:g} exceeds magnetic-moment "
-                f"magnitude {magnitude:g}"
-            )
-
-        reference = supplied_direction
-        if reference is None:
-            reference = _fallback_direction(unit_moment)
+        reference = _fallback_direction(unit_moment)
         projection = reference - np.dot(reference, unit_moment) * unit_moment
-        unit_projection, projection_magnitude = _unit_and_magnitude(projection)
-        if projection_magnitude <= _COLLINEAR_TOLERANCE:
-            reference = _fallback_direction(unit_moment)
-            projection = reference - np.dot(reference, unit_moment) * unit_moment
-            unit_projection, _ = _unit_and_magnitude(projection)
-
-        transverse_direction = cosine * unit_projection + sine * np.cross(
-            unit_moment, unit_projection
+        first_axis, _ = _unit_and_magnitude(projection)
+        second_axis = np.cross(unit_moment, first_axis)
+        azimuth = rng.uniform(0.0, 2.0 * np.pi)
+        transverse_direction = (
+            np.cos(azimuth) * first_axis + np.sin(azimuth) * second_axis
         )
-        transverse_magnitude = rcut
-        ratio = transverse_magnitude / magnitude
-        longitudinal = magnitude * np.sqrt(max(0.0, (1.0 - ratio) * (1.0 + ratio)))
-        result[atom_index] = (
-            longitudinal * unit_moment + transverse_magnitude * transverse_direction
+        result[atom_index] = magnitude * (
+            polar_cosine * unit_moment + polar_sine * transverse_direction
         )
     return result
 
 
-def _number_values(value, field, non_negative=False):
+def _angle_values(value):
     objects = np.asarray(value, dtype=object)
     if any(isinstance(item, (bool, np.bool_)) for item in objects.flat):
-        raise ValueError(f"Canting {field} values must not be boolean")
+        raise ValueError("Canting angle values must not be boolean")
     try:
         array = np.asarray(value, dtype=float)
     except (TypeError, ValueError) as error:
-        raise ValueError(f"Canting {field} must be numeric") from error
+        raise ValueError("Canting angle must be numeric") from error
     if array.ndim == 0:
         array = array.reshape(1)
     if array.ndim != 1 or not array.size or not np.isfinite(array).all():
-        raise ValueError(f"Canting {field} must be a finite number or nonempty list")
-    if non_negative and np.any(array < 0):
-        raise ValueError(f"Canting {field} values must be non-negative")
+        raise ValueError("Canting angle must be a finite number or nonempty list")
+    if np.any(array < 0) or np.any(array > 180):
+        raise ValueError("Canting angle values must be between 0 and 180 degrees")
     return [float(item) for item in array]
 
 
-def _direction_values(value):
-    if value is None:
-        return [None]
-    objects = np.asarray(value, dtype=object)
-    if any(isinstance(item, (bool, np.bool_)) for item in objects.flat):
-        raise ValueError("Canting direction values must not be boolean")
-    try:
-        array = np.asarray(value, dtype=float)
-    except (TypeError, ValueError) as error:
-        raise ValueError("Canting direction must be numeric") from error
-    if array.shape == (3,):
-        array = array.reshape(1, 3)
-    if array.ndim != 2 or array.shape[1] != 3 or not len(array):
-        raise ValueError("Canting direction must be a 3-vector or a list of 3-vectors")
-    if not np.isfinite(array).all():
-        raise ValueError("Canting direction values must be finite")
-    return [row.copy() for row in array]
+def _seed_value(value):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError("Canting seed must be a non-negative integer")
+    if value < 0:
+        raise ValueError("Canting seed must be a non-negative integer")
+    return int(value)
 
 
 def build_spin_perturbation(pert_spin):
@@ -150,7 +111,7 @@ def build_spin_perturbation(pert_spin):
     if not pert_spin:
         return 0, None
 
-    combinations = []
+    configurations = []
     for block_index, block in enumerate(pert_spin):
         if not isinstance(block, dict) or not block:
             raise ValueError(f"pert_spin[{block_index}] must be a nonempty object")
@@ -161,36 +122,34 @@ def build_spin_perturbation(pert_spin):
                 )
             if not isinstance(parameters, dict):
                 raise ValueError(f"pert_spin[{block_index}].Canting must be an object")
-            unknown = set(parameters) - {"angle", "Rcut", "direction"}
+            unknown = set(parameters) - {"angle", "seed"}
             if unknown:
                 raise ValueError(
                     f"unknown Canting parameter(s): {', '.join(sorted(unknown))}"
                 )
-            missing = {"angle", "Rcut"} - set(parameters)
+            missing = {"angle"} - set(parameters)
             if missing:
                 raise ValueError(
                     f"missing Canting parameter(s): {', '.join(sorted(missing))}"
                 )
-            angles = _number_values(parameters["angle"], "angle")
-            rcuts = _number_values(parameters["Rcut"], "Rcut", non_negative=True)
-            directions = _direction_values(parameters.get("direction"))
-            combinations.extend(product(angles, rcuts, directions))
+            angles = _angle_values(parameters["angle"])
+            seed = _seed_value(parameters["seed"]) if "seed" in parameters else None
+            rng = np.random.default_rng(seed)
+            configurations.extend((angle, rng) for angle in angles)
 
     def provider(moments, count):
-        if count != len(combinations):
+        if count != len(configurations):
             raise ValueError(
-                f"Canting provider expected {len(combinations)} configurations, "
+                f"Canting provider expected {len(configurations)} configurations, "
                 f"received {count}"
             )
-        configurations = {}
-        for index, (angle, rcut, direction) in enumerate(combinations, start=1):
+        perturbed = {}
+        for index, (angle, rng) in enumerate(configurations, start=1):
             name = f"C{index}"
             try:
-                configurations[name] = cant_moments(
-                    moments, angle=angle, rcut=rcut, direction=direction
-                )
+                perturbed[name] = cant_moments(moments, angle=angle, rng=rng)
             except ValueError as error:
                 raise ValueError(f"{name}: {error}") from error
-        return configurations
+        return perturbed
 
-    return len(combinations), provider
+    return len(configurations), provider
