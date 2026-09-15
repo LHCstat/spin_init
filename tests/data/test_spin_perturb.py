@@ -138,6 +138,66 @@ class TestRandom(unittest.TestCase):
                 self.module().build_spin_perturbation([{"Random": parameters}])
 
 
+class TestScale(unittest.TestCase):
+    def module(self):
+        from dpgen.data import spin_perturb
+
+        return spin_perturb
+
+    def test_grid_excludes_zero_and_scale_is_relative(self):
+        module = self.module()
+
+        np.testing.assert_allclose(
+            module._scale_deltas(0.25, 0.05),
+            [
+                -0.25,
+                -0.20,
+                -0.15,
+                -0.10,
+                -0.05,
+                0.05,
+                0.10,
+                0.15,
+                0.20,
+                0.25,
+            ],
+            rtol=0,
+            atol=1e-15,
+        )
+        np.testing.assert_allclose(
+            module.scale_moments([[2, -4, 0]], -0.25), [[1.5, -3, 0]]
+        )
+
+    def test_scale_provider_names_follow_delta_order(self):
+        count, provider = self.module().build_spin_perturbation(
+            [{"Scale": {"pert": 0.10, "pert_step": 0.05}}]
+        )
+
+        configurations = provider(np.array([[0.0, 0.0, 2.0]]), count)
+
+        self.assertEqual(count, 4)
+        self.assertEqual(list(configurations), ["S1", "S2", "S3", "S4"])
+        np.testing.assert_allclose(
+            [configurations[name][0, 2] for name in configurations],
+            [1.8, 1.9, 2.1, 2.2],
+        )
+
+    def test_scale_rejects_invalid_range_step_ratio_and_fields(self):
+        invalid = [
+            {"pert": 0, "pert_step": 0.1},
+            {"pert": 1, "pert_step": 0.1},
+            {"pert": -0.1, "pert_step": 0.1},
+            {"pert": 0.25, "pert_step": 0},
+            {"pert": 0.25, "pert_step": 0.06},
+            {"pert": 0.25},
+            {"pert_step": 0.05},
+            {"pert": 0.25, "pert_step": 0.05, "seed": 1},
+        ]
+        for parameters in invalid:
+            with self.subTest(parameters=parameters), self.assertRaises(ValueError):
+                self.module().build_spin_perturbation([{"Scale": parameters}])
+
+
 class TestCanting(unittest.TestCase):
     def module(self):
         from dpgen.data import spin_perturb

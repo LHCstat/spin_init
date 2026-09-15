@@ -82,6 +82,44 @@ def _axis_values(value, label):
     return units
 
 
+def _single_finite_number(value, label):
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{label} must not be boolean")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be numeric") from error
+    if np.asarray(value, dtype=object).ndim != 0 or not np.isfinite(result):
+        raise ValueError(f"{label} must be one finite number")
+    return result
+
+
+def _scale_deltas(pert, pert_step):
+    pert_value = _single_finite_number(pert, "Scale pert")
+    step_value = _single_finite_number(pert_step, "Scale pert_step")
+    if not 0.0 < pert_value < 1.0:
+        raise ValueError("Scale pert must satisfy 0 < pert < 1")
+    if step_value <= 0.0:
+        raise ValueError("Scale pert_step must be positive")
+    steps = int(round(pert_value / step_value))
+    if steps < 1 or not np.isclose(
+        steps * step_value, pert_value, rtol=1e-12, atol=1e-15
+    ):
+        raise ValueError("Scale pert / pert_step must be an integer")
+    negative = [-step_value * index for index in range(steps, 0, -1)]
+    positive = [step_value * index for index in range(1, steps + 1)]
+    return [float(value) for value in negative + positive]
+
+
+def scale_moments(moments, delta):
+    """Scale every moment by the relative factor ``1 + delta``."""
+    delta_value = _single_finite_number(delta, "Scale delta")
+    result = _moments_array(moments) * (1.0 + delta_value)
+    if not np.isfinite(result).all():
+        raise ValueError("scaled magnetic moments must remain finite")
+    return result
+
+
 def rotate_moments(moments, angle, axis):
     """Rotate moments around a global axis using the right-hand rule."""
     result = _moments_array(moments)
@@ -194,7 +232,7 @@ def build_spin_perturbation(pert_spin):
         return 0, None
 
     configurations = []
-    mode_counts = {"Canting": 0, "Rotation": 0, "Random": 0}
+    mode_counts = {"Canting": 0, "Rotation": 0, "Random": 0, "Scale": 0}
     for block_index, block in enumerate(pert_spin):
         if not isinstance(block, dict) or not block:
             raise ValueError(f"pert_spin[{block_index}] must be a nonempty object")
@@ -276,6 +314,28 @@ def build_spin_perturbation(pert_spin):
                 name = f"Rand{mode_counts[mode]}"
                 configurations.append(
                     (name, lambda moments, rng=rng: randomize_moments(moments, rng))
+                )
+        elif mode == "Scale":
+            unknown = set(parameters) - {"pert", "pert_step"}
+            if unknown:
+                raise ValueError(
+                    f"unknown Scale parameter(s): {', '.join(sorted(unknown))}"
+                )
+            missing = {"pert", "pert_step"} - set(parameters)
+            if missing:
+                raise ValueError(
+                    f"missing Scale parameter(s): {', '.join(sorted(missing))}"
+                )
+            for delta in _scale_deltas(
+                parameters["pert"], parameters["pert_step"]
+            ):
+                mode_counts[mode] += 1
+                name = f"S{mode_counts[mode]}"
+                configurations.append(
+                    (
+                        name,
+                        lambda moments, delta=delta: scale_moments(moments, delta),
+                    )
                 )
         else:
             raise NotImplementedError(f"spin perturbation mode {mode!r} is not implemented")
