@@ -121,6 +121,36 @@ class TestSpinTasks(unittest.TestCase):
         self.assertFalse((self.root / "03.spin").exists())
         np.testing.assert_array_equal(tasks[1]["moments"], [[2, 0, 0], [0, 0, 0]])
 
+    def test_ordered_pipeline_plans_baseline_and_final_leaves(self):
+        from dpgen.data.spin_perturb import build_spin_perturbation
+
+        module = self.module()
+        count, provider = build_spin_perturbation(
+            [
+                {"Rotation": {"angle": 90, "axis": [0, 0, 1]}},
+                {"Scale": {"pert": 0.1, "pert_step": 0.1}},
+            ]
+        )
+        self.jdata["spin_pert_numb"] = count
+
+        tasks = module.plan_spin_tasks(self.jdata, {}, perturb=provider)
+
+        self.assertEqual(
+            [task["task"] for task in tasks],
+            [
+                "scale-1.000/000000/00/000000",
+                "scale-1.000/000000/00/R1-S1",
+                "scale-1.000/000000/00/R1-S2",
+                "scale-1.000/000000/01/000000",
+                "scale-1.000/000000/01/R1-S1",
+                "scale-1.000/000000/01/R1-S2",
+            ],
+        )
+        np.testing.assert_array_equal(tasks[0]["moments"], [[0, 0, 2], [0, 0, 0]])
+        np.testing.assert_allclose(tasks[1]["moments"], [[0, 0, 1.8], [0, 0, 0]])
+        np.testing.assert_allclose(tasks[2]["moments"], [[0, 0, 2.2], [0, 0, 0]])
+        self.assertFalse((self.root / "03.spin").exists())
+
     def test_discovers_extra_snapshot_parents_and_sorts_frames_numerically(self):
         module = self.module()
         for parent, frames in {
@@ -343,16 +373,12 @@ class TestSpinTasks(unittest.TestCase):
         make.assert_called_once()
         run.assert_not_called()
 
-    def test_stage4_wires_canting_combinations_into_task_generation(self):
+    def test_stage4_wires_final_pipeline_count_and_names_into_task_generation(self):
         module = self.module()
         self.jdata["spin_action"] = "make"
         self.jdata["pert_spin"] = [
-            {
-                "Canting": {
-                    "angle": [30, 60],
-                    "seed": 12345,
-                }
-            }
+            {"Rotation": {"angle": [90, 180], "axis": [0, 0, 1]}},
+            {"Scale": {"pert": 0.1, "pert_step": 0.1}},
         ]
         param = self.root / "input.json"
         param.write_text(json.dumps(self.jdata))
@@ -361,37 +387,39 @@ class TestSpinTasks(unittest.TestCase):
 
         generated_jdata, _ = make.call_args.args
         provider = make.call_args.kwargs["perturb"]
-        self.assertEqual(generated_jdata["spin_pert_numb"], 2)
+        self.assertEqual(generated_jdata["spin_pert_numb"], 4)
         self.assertEqual(
-            list(provider(np.array([[0, 0, 1.0]]), 2)),
-            ["C1", "C2"],
+            list(provider(np.array([[1.0, 0, 0]]), 4)),
+            ["R1-S1", "R1-S2", "R2-S1", "R2-S2"],
         )
 
-    def test_invalid_spin_mode_fails_before_an_earlier_stage_runs(self):
+    def test_invalid_spin_parameters_fail_before_an_earlier_stage_runs(self):
         self.jdata["stages"] = [1, 4]
         self.jdata["spin_action"] = "make"
         self.jdata["md_incar"] = str(self.incar)
-        self.jdata["pert_spin"] = [{"Rotation": {"angle": 30, "axis": [0, 0, 1]}}]
+        self.jdata["pert_spin"] = [{"Rotation": {"angle": 30, "axis": [0, 0, 0]}}]
         param = self.root / "input.json"
         param.write_text(json.dumps(self.jdata))
 
         with mock.patch.object(spin_init, "make_spin_init_structures") as make:
-            with self.assertRaisesRegex(NotImplementedError, "Rotation"):
+            with self.assertRaisesRegex(
+                ValueError, r"pert_spin\[0\]\.Rotation\.axis"
+            ):
                 spin_init.gen_spin_init(
                     argparse.Namespace(PARAM=str(param), MACHINE=None)
                 )
         make.assert_not_called()
 
-    def test_run_action_still_rejects_an_unsupported_spin_mode(self):
+    def test_run_action_still_validates_spin_parameters(self):
         self.jdata["stages"] = [4]
         self.jdata["spin_action"] = "run"
-        self.jdata["pert_spin"] = [{"Rotation": {"angle": 30, "axis": [0, 0, 1]}}]
+        self.jdata["pert_spin"] = [{"Rotation": {"angle": 30, "axis": [0, 0, 0]}}]
         param = self.root / "input.json"
         machine = self.root / "machine.json"
         param.write_text(json.dumps(self.jdata))
         machine.write_text(json.dumps({}))
 
-        with self.assertRaisesRegex(NotImplementedError, "Rotation"):
+        with self.assertRaisesRegex(ValueError, r"pert_spin\[0\]\.Rotation\.axis"):
             spin_init.gen_spin_init(
                 argparse.Namespace(PARAM=str(param), MACHINE=str(machine))
             )

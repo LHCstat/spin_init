@@ -101,6 +101,43 @@ class TestSpinInitArginfo(unittest.TestCase):
 
         self.assertEqual(normalized["pert_spin"][0]["Canting"]["seed"], 12345)
 
+    def test_normalizes_all_ordered_spin_operation_blocks_without_reordering(self):
+        parameters = {
+            "stages": [4],
+            "from_poscar_path": "POSCAR",
+            "super_cell": [1, 1, 1],
+            "scale": [1.0],
+            "pert_numb": 0,
+            "pert_box": 0.0,
+            "pert_atom": 0.0,
+            "md_incar": "INCAR.md",
+            "md_nstep": 0,
+            "potcars": ["POTCAR"],
+            "spin_incar": "INCAR.spin",
+            "pert_spin": [
+                {"Rotation": {"angle": 45, "axis": [0, 0, 1]}},
+                {"Canting": {"angle": 30, "seed": 1}},
+                {
+                    "Rota_Cant": {
+                        "R_angle": 60,
+                        "axis": [0, 1, 0],
+                        "C_angle": 20,
+                        "seed": 2,
+                    }
+                },
+                {"Random": {"num": 2, "seed": 3}},
+                {"Scale": {"pert": 0.1, "pert_step": 0.1}},
+            ],
+        }
+
+        normalized = normalize(data_arginfo.spin_init_jdata_arginfo(), parameters)
+
+        self.assertEqual(
+            [next(iter(block)) for block in normalized["pert_spin"]],
+            ["Rotation", "Canting", "Rota_Cant", "Random", "Scale"],
+        )
+        self.assertEqual(normalized["pert_spin"][2]["Rota_Cant"]["C_angle"], 20)
+
     def test_normalizes_fp_machine_parameters(self):
         self.assertTrue(hasattr(data_arginfo, "spin_init_mdata_arginfo"))
 
