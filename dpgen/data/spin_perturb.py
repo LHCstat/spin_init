@@ -391,18 +391,20 @@ def _compile_operations(pert_spin):
             raise NotImplementedError(
                 f"{block_location}: spin perturbation mode {mode!r} is not implemented"
             ) from error
-        operations.append(compiler(parameters, location))
+        operations.append((f"{mode}-{block_index:03d}", compiler(parameters, location)))
     return operations
 
 
 def build_spin_perturbation(pert_spin):
-    """Compile an ordered operation list into the Stage 4 provider contract."""
+    """Compile independent operation groups into the Stage 4 provider contract.
+
+    Each block starts from the input moments. Only parameter variants inside
+    that block form a Cartesian product; different blocks never compose.
+    """
     operations = _compile_operations(pert_spin)
     if not operations:
         return 0, None
-    count = 1
-    for variants in operations:
-        count *= len(variants)
+    count = sum(len(variants) for _, variants in operations)
 
     def provider(moments, requested_count):
         if requested_count != count:
@@ -410,20 +412,15 @@ def build_spin_perturbation(pert_spin):
                 f"spin provider expected {count} configurations, "
                 f"received {requested_count}"
             )
-        branches = [("", _moments_array(moments))]
-        for variants in operations:
-            expanded = []
-            for parent_name, parent_moments in branches:
-                for local_name, transform in variants:
-                    name = (
-                        local_name if not parent_name else f"{parent_name}-{local_name}"
-                    )
-                    try:
-                        values = _moments_array(transform(parent_moments))
-                    except ValueError as error:
-                        raise ValueError(f"{name}: {error}") from error
-                    expanded.append((name, values))
-            branches = expanded
-        return {name: values for name, values in branches}
+        initial = _moments_array(moments)
+        configurations = {}
+        for group, variants in operations:
+            for local_name, transform in variants:
+                name = f"{group}/{local_name}"
+                try:
+                    configurations[name] = _moments_array(transform(initial.copy()))
+                except ValueError as error:
+                    raise ValueError(f"{name}: {error}") from error
+        return configurations
 
     return count, provider

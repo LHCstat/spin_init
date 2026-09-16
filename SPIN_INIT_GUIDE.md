@@ -2,6 +2,7 @@
 
 本文给出安装、配置、分阶段运行和排错步骤。字段与完整输入输出说明见
 [doc/init/spin-init-usage.md](doc/init/spin-init-usage.md)。
+逐层输出目录与文件说明见 [SPIN_INIT_OUTPUT_STRUCTURE.md](SPIN_INIT_OUTPUT_STRUCTURE.md)。
 
 ## 1. 当前功能
 
@@ -10,11 +11,11 @@ POSCAR
   → 00.scale_pert：扩胞、缩放、晶胞/原子扰动
   → 01.md：VASP AIMD
   → 02.disp：XDATCAR 的逐帧 POSCAR
-  → 03.spin：每个快照的非共线磁性静态 VASP task
+  → 03.spin：每个快照的非共线磁性静态或结构/晶格优化 VASP task
 ```
 
-这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、五种磁矩操作的有序
-组合、目录生成、符号链接、dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。输入磁矩
+这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、五种磁矩操作的独立
+分组、目录生成、符号链接、dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。输入磁矩
 不变的基准构型始终命名为 `000000`。
 
 ## 2. 安装与检查
@@ -58,7 +59,7 @@ work/
 `INCAR.spin.*` 初始磁矩模板。两类文件不会相互覆盖。
 
 每个 stage-4 INCAR 中必须有正确的 `MAGMOM` 和 `M_CONSTR` 标签。每个原子写三个
-分量，且两行数值相同。例如二原子体系：
+分量，且两行数值相同。例如二原子体系的静态模板：
 
 ```text
 SYSTEM = spin_init_static
@@ -74,6 +75,13 @@ M_CONSTR = 0 0 2  0 0 0
 LWAVE = .FALSE.
 LCHARG = .FALSE.
 ```
+
+若 Stage 4 需要结构/晶格优化，把静态参数替换为例如 `NSW=50`、`IBRION=2`，并设置
+`ISIF=3`（允许晶格变化）或 `ISIF=2`（固定晶格只优化位置），按体系设置 `EDIFFG`。
+程序保留这些参数，不会强制改回静态值。优化任务自动回传 CONTCAR；结果检查将正常
+结束与结构收敛分开，未发现结构收敛标志时告警。初始 POSCAR 链接与 `02.disp` 源文件
+不会被最终结构覆盖。详见
+[Stage 4 结构与晶格优化](doc/init/spin-init-usage.md#stage-4-结构与晶格优化)。
 
 `spin-init.json`：
 
@@ -100,15 +108,21 @@ LCHARG = .FALSE.
 }
 ```
 
-`spin_incar` 也可以继续写成单个字符串，此时输出目录与旧版本完全一致。写成列表时，
+`spin_incar` 也可以继续写成单个字符串，此时不增加 `incar-###` 索引层。写成列表时，
 列表必须非空、路径不能重复，并按输入顺序增加 `incar-000`、`incar-001`……目录。每个
 模板都使用自己的初始 `MAGMOM/M_CONSTR`，然后执行同一套 `pert_spin` 操作。随机操作
-共用一个连续 RNG 序列，遍历顺序为 snapshot → INCAR 输入顺序 → 磁扰动分支，因此
+共用每个随机操作各自的连续 RNG 序列，遍历顺序为 snapshot → INCAR 输入顺序 →
+扰动字段输入顺序 → 局部变体，因此
 不同 INCAR 的随机结果不同，但相同 seed 和输入顺序仍可完整复现。
 
-`pert_spin` 是有序操作列表：每项必须且只能写一个模式，按列表顺序依次执行；同一模式
-可以重复。每一步都会对已有全部分支做笛卡尔展开，只把最终叶子写入 `03.spin`。上例
-产生 `1 × 2 × 2 = 4` 个最终构型：`R1-C1-S1` 到 `R1-C2-S2`，另有基准 `000000`。
+`pert_spin` 是独立操作组列表：每项必须且只能写一个模式；同一模式可以重复。
+每个字段从模板的初始磁矩出发，不使用其他字段的结果；只有同一字段内部的参数列表
+保留笛卡尔组合。上例产生 `1 + 2 + 2 = 5` 个独立扰动构型，另有共享基准 `000000`。
+
+输出按模式和从零开始的字段输入序号分组：`Rotation-000/R1`、`Canting-001/C1`、
+`Canting-001/C2`、`Scale-002/S1`、`Scale-002/S2`。如果再次输入 Rotation，例如位于
+列表第 4 项，则创建独立的 `Rotation-003`。分开写 Rotation 和 Canting 不再串联；
+需要先旋转再 canting 时使用 `Rota_Cant`。
 
 五种模式如下：
 
@@ -124,7 +138,7 @@ LCHARG = .FALSE.
   零的相对增量生成 `S1`……，计算式为 `m' = (1 + delta) m`。
 
 Canting、Rota_Cant、Random 的 `seed` 是可选非负整数。每个随机操作拥有一个 RNG，按
-父分支、局部变体、原子和后续 snapshot 的稳定顺序连续推进；相同 seed、输入和任务
+局部变体、原子、后续 INCAR 模板和 snapshot 的稳定顺序连续推进；相同 seed、输入和任务
 顺序可复现完整序列。所有模式都让零磁矩保持为零。旧 Canting 参数 `Rcut`、
 `direction` 不再接受；`spin_pert_numb` 是内部字段，用户应省略。
 
@@ -159,9 +173,11 @@ Canting、Rota_Cant、Random 的 `seed` 是可选非负整数。每个随机操�
 `vasp_std`、磁性计算使用 `vasp_ncl`，可在同一 JSON 中再加一个结构完全相同的 `spin`
 项，并把它的 command 写为 `srun vasp_ncl`。没有 `spin` 项时，stage 4 自动复用 `fp`。
 
-将 `vasp.slurm` 加入 `user_forward_files` 只会把它传入 task。只有 command 写成例如
-`sbatch vasp.slurm` 时才会执行该脚本；`srun vasp_std` 或 `srun vasp_ncl` 是直接执行
-VASP。
+将 `vasp.slurm` 加入 `user_forward_files` 只会把它传入 task；command 写成
+`sbatch vasp.slurm` 则会调用 sbatch 提交该脚本。这不等于 DPDispatcher 会跟踪脚本中的
+VASP：普通 sbatch 在子作业入队后就返回，DPDispatcher 可能提前判定命令完成并回传
+输出。推荐让 DPDispatcher 管理 Slurm 作业，在其中直接执行 `srun vasp_std` 或
+`srun vasp_ncl`，不要把普通异步 sbatch 当作可靠的完成检查方式。
 
 ## 5. 分阶段运行
 
@@ -208,17 +224,26 @@ run_spin/
 └── 03.spin/scale-1.000/000000/00/
     ├── incar-000/
     │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    │   └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
     └── incar-001/
         ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
-是普通独立文件，每个组合目录写入对应的 MAGMOM/M_CONSTR。若 `spin_incar` 是单个
-字符串，则不会出现 `incar-###` 层，继续使用原有路径。
+是普通独立文件，每个局部变体目录写入对应的 MAGMOM/M_CONSTR。若 `spin_incar` 是单个
+字符串，则不会出现 `incar-###` 层；磁扰动的模式分组层仍按新规则生成。
 
-stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。
+已有旧版未分组任务仍可使用 `spin_action="run"` 按清单提交；程序不会迁移或重新
+扰动已有 `03.spin`。要生成新分组布局，请使用新的 `out_dir`；若只运行 Stage 4，
+需要先在该输出根目录下准备好对应的 `02.disp` 快照。
+
+stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR，包含优化
+任务时这批提交还自动回传 CONTCAR。以上树形结构是静态输出示例。
 
 ## 7. 检查与排错
 

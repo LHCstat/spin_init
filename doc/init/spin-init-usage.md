@@ -3,14 +3,14 @@
 ## 作用与流程
 
 `spin_init` 从一个已有 POSCAR 出发，生成结构扰动后的 VASP AIMD 任务，拆分 XDATCAR
-轨迹，并为每个轨迹快照建立非共线磁性静态计算：
+轨迹，并为每个轨迹快照建立非共线磁性静态或结构/晶格优化计算：
 
 ```text
 POSCAR
   → 扩胞、scale、box/atom perturbation
   → VASP AIMD
   → XDATCAR → 独立 POSCAR snapshots
-  → 非共线磁性静态 VASP task
+  → 非共线磁性静态或优化 VASP task
 ```
 
 命令为：
@@ -26,7 +26,7 @@ dpgen spin_init PARAM [MACHINE]
 | 1 | 扩胞、缩放、结构扰动 | `00.scale_pert` |
 | 2 | 建立 AIMD task；提供 MACHINE 时提交 | `01.md` |
 | 3 | 检查 OUTCAR、解析 XDATCAR、导出快照 | `02.disp` |
-| 4 | 为每个快照建立/提交磁性静态计算 | `03.spin` |
+| 4 | 为每个快照建立/提交磁性静态或优化计算 | `03.spin` |
 
 ## 输入文件
 
@@ -36,7 +36,7 @@ dpgen spin_init PARAM [MACHINE]
 | --- | --- |
 | `POSCAR` | 初始结构 |
 | `INCAR.md` | stage 2 的 AIMD 参数 |
-| `INCAR.spin` 或多个 `INCAR.state_*` | stage 4 的非共线磁性静态计算模板 |
+| `INCAR.spin` 或多个 `INCAR.state_*` | stage 4 的非共线磁性静态或优化计算模板 |
 | `POTCAR` 或多个赝势片段 | VASP 赝势，顺序必须与 POSCAR 一致 |
 | `spin-init.json` | 工作流参数 |
 | `machine.json` | 自动提交时使用的 dpdispatcher 配置 |
@@ -74,9 +74,9 @@ LCHARG = F
 - 同时存在 `MAGMOM` 和 `M_CONSTR`，且两者数值完全相同；
 - 每个 POSCAR 原子对应三个笛卡尔分量，所以每行总计必须有 `3 × 原子数` 个数；
 - 启用 `LNONCOLLINEAR = .TRUE.`（启用 `LSORBIT` 也满足非共线要求）；
-- 当前为静态计算，要求 `NSW = 0`、`IBRION = -1`。
+- `NSW >= 0`，可自行设置 `NSW / IBRION / ISIF`，程序不会强制改成静态计算。
 
-二原子示例：
+二原子静态计算示例（不是对所有模板的强制设置）：
 
 ```text
 SYSTEM = spin_init_static
@@ -96,6 +96,42 @@ LCHARG = .FALSE.
 也支持 VASP 的重复写法和反斜杠续行，例如 `6*0.0`。程序读取 `MAGMOM` 后会验证
 其原子数，并为每个 task 写出一份独立 INCAR；`M_CONSTR` 始终与该 task 的 `MAGMOM`
 同步。
+
+### Stage 4 结构与晶格优化
+
+需要优化时，在上述 `INCAR.spin` 中替换静态参数并加入例如：
+
+```text
+NSW = 50
+IBRION = 2
+ISIF = 3
+EDIFFG = -0.02
+```
+
+`NSW` 是最大离子步数，不要求实际运行满 50 步。`IBRION=1/2/3` 配合 `NSW>0`
+表示常用结构优化；`ISIF=2` 只优化原子位置，`ISIF=3` 允许位置、晶胞形状和体积变化。
+这些仅是写法示例，具体收敛参数需要为体系验证。省略 `IBRION` 时，VASP 在 `NSW>0`
+下默认使用 `IBRION=0`，不是结构优化，程序不会自动代填 `IBRION=2`。
+参见 [VASP IBRION](https://vasp.at/wiki/index.php/IBRION)、
+[ISIF](https://vasp.at/wiki/index.php/ISIF) 和 [NSW](https://vasp.at/wiki/index.php/NSW)。
+
+优化任务自动追加回传 `CONTCAR`。多个模板可同时包含静态与优化模板；由于共享提交
+使用统一 backward files，只要有一个优化 task，就为这批所有 task 请求回传 CONTCAR，
+但只对优化 task 校验最终结构和收敛标志。用户额外 backward files 继续追加并去重。
+
+结果检查分成两个判断：
+
+- 正常结束：OUTCAR 有一个计时结束标志和力输出、OSZICAR 非空。静态 `NSW=0` 保留
+  单个力块检查；离子计算允许多个力块，也允许优化提前结束。
+- 优化收敛：优化任务还必须有非空、可解析、原子数及元素顺序正确的 CONTCAR；
+  晶格和坐标允许变化。OUTCAR 出现 `reached required accuracy - stopping structural
+  energy minimisation` 时记录已确认结构收敛；正常退出但没有该标志时明确告警
+  “structural convergence was not confirmed”，不宣称优化收敛。
+
+`check_spin_results` 返回正常结束的任务数，包含发出未确认结构收敛告警的任务；这不代表
+电子/磁矩已经收敛。`CONTCAR` 是最后一个离子步结构，即使正常结束也可能未优化收敛。
+初始 `POSCAR` 仍为指向 `02.disp` 的真实相对符号链接，程序绝不把 CONTCAR 覆盖到
+这个链接或其源文件上。参见 [VASP CONTCAR](https://vasp.at/wiki/index.php/CONTCAR)。
 
 ### `spin-init.json` 编写方式
 
@@ -128,15 +164,15 @@ stage-4 新字段：
 
 | 字段 | 含义 |
 | --- | --- |
-| `spin_incar` | 一个磁性静态 INCAR 路径，或按顺序排列的非空路径列表 |
-| `pert_spin` | 有序磁矩操作列表；支持 `Rotation`、`Canting`、`Rota_Cant`、`Random`、`Scale` |
+| `spin_incar` | 一个磁性静态/优化 INCAR 路径，或按顺序排列的非空路径列表 |
+| `pert_spin` | 按输入顺序输出的独立磁矩扰动组；支持 `Rotation`、`Canting`、`Rota_Cant`、`Random`、`Scale` |
 | `spin_pert_numb` | 内部兼容字段；用户应省略或保持为 `0` |
 | `spin_action` | `make`、`run` 或 `make_run` |
 
 `spin_action=make` 只生成 `03.spin`；`run` 只提交已存在的 `03.spin`，并要求提供
 MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE 时只生成。
 
-单个初始 INCAR 沿用字符串写法和原有输出路径：
+单个初始 INCAR 沿用字符串写法，不增加 `incar-###` 索引层：
 
 ```json
 "spin_incar": "./INCAR.spin"
@@ -154,13 +190,20 @@ MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE �
 列表必须非空，每项必须是非空字符串，解析后的文件路径不能重复。列表输入会在
 snapshot 与磁构型之间增加 `incar-000`、`incar-001`……层；即使列表中只有一个文件也
 会增加 `incar-000`。每个文件提供自己的初始 `MAGMOM/M_CONSTR`，随后应用相同的
-`pert_spin`。执行顺序固定为 snapshot → INCAR 输入顺序 → 磁扰动分支。所有 INCAR
-共用一个连续 RNG 序列，不会分别重新 seed，所以随机结果不同但整体可以复现。
+`pert_spin`。遍历顺序固定为 snapshot → INCAR 输入顺序 → 扰动字段输入顺序 → 局部变体。
+所有 INCAR 共用每个随机操作各自的连续 RNG 序列，不会分别重新 seed，所以随机结果
+不同但整体可以复现。
 
-每个快照保留输入磁矩不变的基准构型 `000000`。`pert_spin` 每项必须且只能包含一个
-模式，按列表顺序执行，允许重复模式。每一步都对当前全部分支做笛卡尔展开，只输出
-最终叶子。局部名称分别为 `R#`、`C#`、`RC#`、`Rand#`、`S#`，组合名称按执行顺序
-用 `-` 连接，例如 `R1-C2-S1`。
+每个快照的每个 INCAR 模板保留一个输入磁矩不变的基准构型 `000000`。
+`pert_spin` 每项必须且只能包含一个
+模式，允许重复模式。不同字段独立作用于模板中的初始磁矩，不会使用前一个字段的
+结果；只有同一字段内部的参数列表保留笛卡尔组合。因此不同字段的构型数量相加，
+不再相乘。
+
+输出组名为 `<模式>-<从零开始的字段输入序号>`，例如 `Rotation-000`、`Canting-001`、
+`Scale-002`。组内局部名称分别为 `R#`、`C#`、`RC#`、`Rand#`、`S#`，例如
+`Rotation-000/R1/INCAR`。重复输入同一模式时仍是独立组，不会重名或累积作用。
+若需要明确的先旋转再 canting，请使用 `Rota_Cant`，而不是分开写 Rotation 和 Canting。
 
 ### Canting 参数和数学定义
 
@@ -219,16 +262,20 @@ Rodrigues 公式绕全局轴旋转所有磁矩。零磁矩不变，非零磁矩�
 {"Scale": {"pert": 0.25, "pert_step": 0.05}}
 ```
 
-每个 Canting、Rota_Cant 或 Random 操作各自拥有一个 RNG。它不会为每个原子、变体、
-父分支或 snapshot 重新设 seed，而是按稳定顺序连续推进。
+每个 Canting、Rota_Cant 或 Random 字段各自拥有一个 RNG。它不会为每个原子、变体、
+INCAR 模板或 snapshot 重新设 seed，而是按稳定顺序连续推进。其他字段不会改变该
+字段的初始磁矩或随机数消耗次数。
 
 例如 Rotation 有 2 个 angle 和 2 个 axis、Canting 有 2 个 angle、Scale 使用上述
-10 个增量时，共产生 `4 × 2 × 10 = 80` 个最终扰动构型，另加 `000000`。代表路径为：
+10 个增量时，共产生 `4 + 2 + 10 = 16` 个独立扰动构型，另加共享基准 `000000`。
+代表路径为：
 
 ```text
 03.spin/.../000000/INCAR
-03.spin/.../R1-C1-S1/INCAR
-03.spin/.../R4-C2-S10/INCAR
+03.spin/.../Rotation-000/R1/INCAR
+03.spin/.../Rotation-000/R4/INCAR
+03.spin/.../Canting-001/C2/INCAR
+03.spin/.../Scale-002/S10/INCAR
 ```
 
 ## machine.json 编写方式
@@ -279,8 +326,11 @@ Rodrigues 公式绕全局轴旋转所有磁矩。零磁矩不变，非零磁矩�
 }
 ```
 
-`vasp.slurm` 放入 `user_forward_files` 只表示把文件传到 task 目录。只有 command 明确
-写成例如 `sbatch vasp.slurm` 时才会通过该脚本提交；`srun vasp_ncl` 会直接运行程序。
+`vasp.slurm` 放入 `user_forward_files` 只表示把文件传到 task 目录。command 明确
+写成 `sbatch vasp.slurm` 会调用 sbatch 提交该脚本，但普通 sbatch 入队后就返回，
+DPDispatcher 不会自动跟踪子作业的 VASP 完成状态，可能提前回传文件并触发结果检查。
+推荐由 DPDispatcher 管理 Slurm 作业，在其作业内直接执行 `srun vasp_std` 或
+`srun vasp_ncl`，而不是嵌套普通异步 sbatch。
 
 Bohrium/DPCloudServerContext 还需要 dpdispatcher 的 Bohrium 可选依赖：
 
@@ -317,16 +367,21 @@ out_dir/
     └── scale-1.000/000000/00/
         ├── incar-000/
         │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
         └── incar-001/
             ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-            └── R1-C1-S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+            ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+            ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+            └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 ```
 
-stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR。用户配置的
+stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR，包含优化
+任务的提交还自动回传 CONTCAR。用户配置的
 backward files 会在此基础上追加。`03.spin` 中 POSCAR/POTCAR 必须是真实相对符号链接，
-INCAR 则是每个磁构型自己的普通文件。上图展示列表写法；字符串写法保持原结构，不含
-`incar-###` 层。
+INCAR 则是每个磁构型自己的普通文件。上图展示列表写法；字符串写法不含
+`incar-###` 层，但同样具有磁扰动模式分组层。
 
 ## 分阶段运行
 
@@ -344,6 +399,10 @@ dpgen spin_init spin-init.json machine.json
 阶段目录已存在时不会被静默覆盖；已有 `03.spin` 应使用 `spin_action=run`。如果 `make`
 时没有 MACHINE，`run` 会按 MACHINE 补建缺少的 user-forward 符号链接；已有同名文件
 与配置来源不一致时会报错而不是覆盖。
+
+`run` 仍兼容旧版本保存的未分组磁构型路径（包括串联组合名称），不会迁移或重新
+扰动已有 `03.spin`。若要按新规则生成任务，请使用新的 `out_dir`；只运行 Stage 4 时，
+该根目录下必须先准备好对应的 `02.disp` 快照。
 
 ## 当前未实现内容
 

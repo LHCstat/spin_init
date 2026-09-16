@@ -124,7 +124,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 "spin_incar",
                 [str, list[str]],
                 optional=True,
-                doc="One Stage 4 static INCAR template, or an ordered list of templates, each with MAGMOM and M_CONSTR.",
+                doc="One Stage 4 static or relaxation INCAR template, or an ordered list of templates, each with MAGMOM and M_CONSTR. User NSW, IBRION and ISIF settings are preserved.",
             ),
             Argument(
                 "spin_pert_numb",
@@ -138,7 +138,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 list[dict],
                 optional=True,
                 default=[],
-                doc="Ordered magnetic perturbation pipeline. Each item contains exactly one of Rotation, Canting, Rota_Cant, Random, or Scale.",
+                doc="Independent magnetic perturbation groups in input order. Each item contains exactly one of Rotation, Canting, Rota_Cant, Random, or Scale; parameter variants within an item form a Cartesian product.",
             ),
             Argument(
                 "spin_action",
@@ -148,7 +148,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 doc="Stage 4: make, run (existing tasks), or make_run. Without MACHINE, make_run only prepares.",
             ),
         ],
-        doc="Generate VASP AIMD snapshots and static spin tasks.",
+        doc="Generate VASP AIMD snapshots and static or relaxation spin tasks.",
     )
 
 

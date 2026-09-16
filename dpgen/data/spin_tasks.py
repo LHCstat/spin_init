@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from dpgen import dlog
 from dpgen.data.spin_init import (
     _expected_task_paths,
     _make_relative_symlink,
@@ -22,6 +23,10 @@ from dpgen.dispatcher.Dispatcher import make_submission
 from dpgen.generator.lib.utils import check_api_version
 
 SPIN_DIR = "03.spin"
+_CONFIGURATION_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]*"
+_OPERATION_GROUP = r"(?:Rotation|Canting|Rota_Cant|Random|Scale)-\d{3,}"
+# Ungrouped names remain valid for saved tasks from earlier versions.
+_CONFIGURATION_PATH = rf"(?:{_OPERATION_GROUP}/)?{_CONFIGURATION_NAME}"
 
 
 def _vectors(values, natoms, context):
@@ -57,7 +62,7 @@ def _read_vector_tag(value, natoms, context):
 
 
 def read_spin_incar(path, natoms):
-    """Read a static noncollinear template with matching MAGMOM/M_CONSTR."""
+    """Read a noncollinear template, preserving user ionic/cell settings."""
     from pymatgen.io.vasp.inputs import Incar
 
     path = _require_file(path, "spin INCAR source")
@@ -84,11 +89,18 @@ def read_spin_incar(path, natoms):
         incar = Incar.from_str(text)
         if not incar.get("LNONCOLLINEAR", incar.get("LSORBIT", False)):
             raise ValueError("three-component moments require LNONCOLLINEAR = .TRUE.")
-        if int(incar.get("NSW", 0)) != 0 or int(incar.get("IBRION", -1)) != -1:
-            raise ValueError("Stage 4 requires static calculations (NSW=0, IBRION=-1)")
+        if int(incar.get("NSW", 0)) < 0:
+            raise ValueError("Stage 4 requires NSW >= 0")
     except Exception as error:
         raise ValueError(f"{path}: invalid spin INCAR: {error}") from error
     return incar, fields["MAGMOM"]
+
+
+def _relaxation_requested(incar):
+    # VASP defaults to IBRION=0 when NSW>0; never assume an omitted tag
+    # requests optimization and never insert/overwrite ionic settings.
+    nsw = int(incar.get("NSW", 0))
+    return nsw > 0 and int(incar.get("IBRION", -1 if nsw == 0 else 0)) in (1, 2, 3)
 
 
 def write_spin_incar(template, moments, path):
@@ -110,7 +122,8 @@ def _forward_sources(mdata):
     for value in mdata.get("fp_user_forward_files", []):
         name = Path(value).name
         if (
-            name in {"POSCAR", "POTCAR", "INCAR", "OUTCAR", "OSZICAR", "fp.log"}
+            name
+            in {"POSCAR", "POTCAR", "INCAR", "OUTCAR", "OSZICAR", "CONTCAR", "fp.log"}
             or name in sources
         ):
             raise ValueError(f"reserved or duplicate spin forward filename: {name}")
@@ -210,7 +223,7 @@ def _spin_incar_sources(value):
 def plan_spin_tasks(jdata, mdata, perturb=None):
     """Validate all inputs and return one task per snapshot/configuration.
 
-    ``perturb(moments, count)`` returns a mapping of safe task names to N x 3
+    ``perturb(moments, count)`` returns a mapping of safe relative paths to N x 3
     arrays. The baseline 000000 is always added here, not by the provider.
     """
     from pymatgen.io.vasp.inputs import Poscar
@@ -265,7 +278,7 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
                 for name, values in extra.items():
                     if (
                         not isinstance(name, str)
-                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name)
+                        or not re.fullmatch(_CONFIGURATION_PATH, name)
                         or name == "000000"
                     ):
                         raise ValueError(
@@ -330,7 +343,8 @@ def _saved_tasks(jdata):
         raise ValueError(f"{manifest}: expected unique nonempty task list")
     for task in paths:
         if not isinstance(task, str) or not re.fullmatch(
-            r"scale-[0-9]+(?:\.[0-9]+)?/\d{6}/\d{2,}/[A-Za-z0-9][A-Za-z0-9_-]*",
+            rf"scale-[0-9]+(?:\.[0-9]+)?/\d{{6}}/\d{{2,}}/"
+            rf"(?:incar-\d{{3,}}/)?{_CONFIGURATION_PATH}",
             task,
         ):
             raise ValueError(f"{manifest}: invalid task path {task!r}")
@@ -376,6 +390,7 @@ def make_spin_submission(jdata, mdata):
 
     stage, paths = _saved_tasks(jdata)
     forwards = _forward_sources(mdata)
+    has_relaxation = False
     for task in paths:
         dest = stage / task
         for name in ["POSCAR", "INCAR", "POTCAR"]:
@@ -386,7 +401,8 @@ def make_spin_submission(jdata, mdata):
             raise ValueError(
                 f"invalid POSCAR for spin task {task}: {dest / 'POSCAR'}: {error}"
             ) from error
-        read_spin_incar(dest / "INCAR", natoms)
+        incar, _ = read_spin_incar(dest / "INCAR", natoms)
+        has_relaxation = has_relaxation or _relaxation_requested(incar)
     materialize_spin_forward_files(stage, paths, forwards)
     check_api_version(mdata)
     context = mdata["fp_machine"].get("context_type", "").lower()
@@ -407,7 +423,9 @@ def make_spin_submission(jdata, mdata):
         forward_common_files=[],
         forward_files=["POSCAR", "INCAR", "POTCAR", *forwards],
         backward_files=_unique(
-            ["OUTCAR", "OSZICAR"] + mdata.get("fp_user_backward_files", [])
+            ["OUTCAR", "OSZICAR"]
+            + (["CONTCAR"] if has_relaxation else [])
+            + mdata.get("fp_user_backward_files", [])
         ),
         outlog="fp.log",
         errlog="fp.log",
@@ -415,25 +433,81 @@ def make_spin_submission(jdata, mdata):
 
 
 def check_spin_results(jdata):
-    """Check static VASP termination/files, not magnetic RMSE or convergence."""
+    """Count normally terminated tasks; report structural convergence separately.
+
+    Normal termination does not guarantee electronic or magnetic convergence.
+    For relaxation, CONTCAR is the last ionic structure, even if unconverged;
+    it never replaces the initial POSCAR symlink or its snapshot source.
+    """
+    from pymatgen.io.vasp.inputs import Poscar
+
     stage, paths = _saved_tasks(jdata)
     for task in paths:
+        dest = stage / task
+        poscar = _require_file(dest / "POSCAR", "spin POSCAR", task)
+        try:
+            initial = Poscar.from_file(poscar).structure
+        except Exception as error:
+            raise ValueError(
+                f"spin task {task}: invalid POSCAR {poscar}: {error}"
+            ) from error
+        incar, _ = read_spin_incar(dest / "INCAR", len(initial))
         outcar = _require_file(stage / task / "OUTCAR", "spin OUTCAR", task)
         text = outcar.read_text(errors="replace")
         if not text:
             raise RuntimeError(f"empty OUTCAR for spin task {task}: {outcar}")
-        if text.count("Elapse") != 1 or text.count("TOTAL-FORCE") != 1:
+        force_blocks = text.count("TOTAL-FORCE")
+        if (
+            text.count("Elapse") != 1
+            or force_blocks < 1
+            or (int(incar.get("NSW", 0)) == 0 and force_blocks != 1)
+        ):
             raise RuntimeError(
-                f"spin task {task} did not finish normally; expected one "
-                f"elapsed-time and one TOTAL-FORCE marker in: {outcar}"
+                f"spin task {task} did not finish normally; expected one elapsed-time "
+                f"marker and force output (exactly one block for NSW=0) in: {outcar}"
             )
         oszicar = _require_file(stage / task / "OSZICAR", "spin OSZICAR", task)
         if not oszicar.read_text().strip():
             raise RuntimeError(f"empty OSZICAR for spin task {task}: {oszicar}")
+        if _relaxation_requested(incar):
+            contcar = _require_file(dest / "CONTCAR", "spin CONTCAR", task)
+            try:
+                if not contcar.read_text().strip():
+                    raise ValueError("empty file")
+                final = Poscar.from_file(contcar).structure
+                if list(final.species) != list(initial.species):
+                    raise ValueError(
+                        "atom count/species order differs from initial POSCAR"
+                    )
+                if (
+                    not np.isfinite(final.lattice.matrix).all()
+                    or not np.isfinite(final.frac_coords).all()
+                ):
+                    raise ValueError("nonfinite lattice or coordinates")
+            except Exception as error:
+                raise ValueError(
+                    f"spin task {task}: invalid CONTCAR {contcar}: {error}"
+                ) from error
+            normalized = " ".join(text.lower().split())
+            marker = (
+                "reached required accuracy - stopping structural energy minimisation"
+            )
+            if marker in normalized:
+                dlog.info(
+                    "spin task %s: structural convergence confirmed in %s", task, outcar
+                )
+            else:
+                dlog.warning(
+                    "spin task %s: VASP terminated normally but structural convergence "
+                    "was not confirmed in %s; CONTCAR is the last ionic structure, "
+                    "not necessarily an optimized structure",
+                    task,
+                    outcar,
+                )
     return len(paths)
 
 
 def run_spin_tasks(jdata, mdata):
-    """Submit saved tasks, retrieve OUTCAR/OSZICAR, and check termination."""
+    """Submit saved tasks, retrieve outputs, and check termination/convergence."""
     make_spin_submission(jdata, mdata).run_submission()
     return check_spin_results(jdata)
