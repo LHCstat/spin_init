@@ -148,9 +148,9 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [t["task"] for t in tasks],
             [
-                "scale-1.000/000000/00/000000",
+                "scale-1.000/000000/00/origin/000000",
                 "scale-1.000/000000/00/R1",
-                "scale-1.000/000000/01/000000",
+                "scale-1.000/000000/01/origin/000000",
                 "scale-1.000/000000/01/R1",
             ],
         )
@@ -168,10 +168,10 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [task["task"] for task in tasks],
             [
-                "scale-1.000/000000/00/incar-000/000000",
-                "scale-1.000/000000/00/incar-001/000000",
-                "scale-1.000/000000/01/incar-000/000000",
-                "scale-1.000/000000/01/incar-001/000000",
+                "scale-1.000/000000/00/incar-000/origin/000000",
+                "scale-1.000/000000/00/incar-001/origin/000000",
+                "scale-1.000/000000/01/incar-000/origin/000000",
+                "scale-1.000/000000/01/incar-001/origin/000000",
             ],
         )
         np.testing.assert_array_equal(tasks[0]["moments"], [[0, 0, 2], [0, 0, 0]])
@@ -261,11 +261,11 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [task["task"] for task in tasks],
             [
-                "scale-1.000/000000/00/000000",
+                "scale-1.000/000000/00/origin/000000",
                 "scale-1.000/000000/00/Rotation-000/R1",
                 "scale-1.000/000000/00/Scale-001/S1",
                 "scale-1.000/000000/00/Scale-001/S2",
-                "scale-1.000/000000/01/000000",
+                "scale-1.000/000000/01/origin/000000",
                 "scale-1.000/000000/01/Rotation-000/R1",
                 "scale-1.000/000000/01/Scale-001/S1",
                 "scale-1.000/000000/01/Scale-001/S2",
@@ -299,11 +299,11 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [task["task"] for task in tasks[:8]],
             [
-                "scale-1.000/000000/00/incar-000/000000",
+                "scale-1.000/000000/00/incar-000/origin/000000",
                 "scale-1.000/000000/00/incar-000/Rotation-000/R1",
                 "scale-1.000/000000/00/incar-000/Scale-001/S1",
                 "scale-1.000/000000/00/incar-000/Scale-001/S2",
-                "scale-1.000/000000/00/incar-001/000000",
+                "scale-1.000/000000/00/incar-001/origin/000000",
                 "scale-1.000/000000/00/incar-001/Rotation-000/R1",
                 "scale-1.000/000000/00/incar-001/Scale-001/S1",
                 "scale-1.000/000000/00/incar-001/Scale-001/S2",
@@ -337,7 +337,7 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(module._saved_tasks(self.jdata)[1], paths)
         parent = stage / "scale-1.000/000000/00/incar-000"
         for relative, expected in (
-            ("000000", [[0, 0, 2], [0, 0, 0]]),
+            ("origin/000000", [[0, 0, 2], [0, 0, 0]]),
             ("Rotation-000/R1", [[2, 0, 0], [0, 0, 0]]),
             ("Scale-001/S1", [[0, 0, 1.8], [0, 0, 0]]),
             ("Scale-001/S2", [[0, 0, 2.2], [0, 0, 0]]),
@@ -346,6 +346,31 @@ class TestSpinTasks(unittest.TestCase):
             np.testing.assert_allclose(moments, expected, atol=1e-14)
             self.assertEqual(incar["ENCUT"], 400)
         self.assertEqual(self.incar.read_text(), TEMPLATE)
+        for frame in ("00", "01"):
+            for label in ("incar-000", "incar-001"):
+                parent = stage / "scale-1.000/000000" / frame / label
+                self.assertTrue((parent / "origin/000000/INCAR").is_file())
+                self.assertFalse((parent / "000000").exists())
+
+    def test_make_single_incar_writes_baseline_inside_origin(self):
+        module = self.module()
+        with mock.patch.object(module, "_make_relative_symlink"):
+            paths = module.make_spin_tasks(self.jdata, {})
+        expected = [
+            "scale-1.000/000000/00/origin/000000",
+            "scale-1.000/000000/01/origin/000000",
+        ]
+        self.assertEqual(paths, expected)
+        stage = self.root / "03.spin"
+        self.assertEqual(
+            json.loads((stage / "tasks.json").read_text())["tasks"], expected
+        )
+        self.assertEqual(module._saved_tasks(self.jdata)[1], expected)
+        for task in expected:
+            incar, moments = module.read_spin_incar(stage / task / "INCAR", 2)
+            np.testing.assert_array_equal(moments, [[0, 0, 2], [0, 0, 0]])
+            self.assertEqual(incar["ENCUT"], 400)
+            self.assertFalse((stage / task).parent.parent.joinpath("000000").exists())
 
     def test_discovers_extra_snapshot_parents_and_sorts_frames_numerically(self):
         module = self.module()
@@ -363,11 +388,11 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [task["task"] for task in tasks],
             [
-                "scale-1.000/000000/00/000000",
-                "scale-1.000/000000/01/000000",
-                "scale-1.000/000000/11/000000",
-                "scale-1.000/000000/100/000000",
-                "scale-1.000/000001/00/000000",
+                "scale-1.000/000000/00/origin/000000",
+                "scale-1.000/000000/01/origin/000000",
+                "scale-1.000/000000/11/origin/000000",
+                "scale-1.000/000000/100/origin/000000",
+                "scale-1.000/000001/00/origin/000000",
             ],
         )
 
@@ -379,6 +404,8 @@ class TestSpinTasks(unittest.TestCase):
         for name in (
             "../outside",
             "000000",
+            "origin",
+            "origin/000000",
             "R/1",
             "Rotation-000/../outside",
             "Unknown-000/R1",
@@ -445,8 +472,8 @@ class TestSpinTasks(unittest.TestCase):
 
         paths = module.make_spin_tasks(self.jdata, {}, perturb=provider)
 
-        self.assertIn("scale-1.000/000000/00/incar-000/000000", paths)
-        self.assertIn("scale-1.000/000000/00/incar-001/000000", paths)
+        self.assertIn("scale-1.000/000000/00/incar-000/origin/000000", paths)
+        self.assertIn("scale-1.000/000000/00/incar-001/origin/000000", paths)
         self.assertIn("scale-1.000/000000/00/incar-001/Rotation-000/R1", paths)
         self.assertEqual(len(paths), 16)
         saved = json.loads((self.root / "03.spin/tasks.json").read_text())
@@ -489,7 +516,7 @@ class TestSpinTasks(unittest.TestCase):
             module.make_spin_submission(self.jdata, machine)
         make_link.assert_called_once_with(path / "KPOINTS", self.kpoints.resolve())
 
-    def prepare_run_inputs(self, task="scale-1.000/000000/00/000000"):
+    def prepare_run_inputs(self, task="scale-1.000/000000/00/origin/000000"):
         stage = self.root / "03.spin"
         path = stage / task
         path.mkdir(parents=True)
@@ -507,6 +534,9 @@ class TestSpinTasks(unittest.TestCase):
             "scale-1.000/000000/00/incar-001/Scale-001/S1",
             "scale-1.000/000000/01/incar-000/000000",
             "scale-1.000/000000/01/R1-S1",
+            "scale-1.000/000000/00/origin/000000",
+            "scale-1.000/000000/00/incar-001/origin/000000",
+            "scale-1.000/000000/01/000000",
         ]
         for task in paths:
             path = self.prepare_run_inputs(task)
@@ -536,7 +566,7 @@ class TestSpinTasks(unittest.TestCase):
                 for task in submission.belonging_tasks
             )
         )
-        self.assertEqual(module.check_spin_results(self.jdata), 4)
+        self.assertEqual(module.check_spin_results(self.jdata), 7)
 
     def test_task_manifest_rejects_path_escape_and_unrecognized_group(self):
         stage = self.root / "03.spin"
@@ -545,6 +575,10 @@ class TestSpinTasks(unittest.TestCase):
             "scale-1.000/000000/00/incar-000/Rotation-000/../outside",
             "scale-1.000/000000/00/Unknown-000/R1",
             "scale-1.000/000000/00/Rotation-000/R1/extra",
+            "scale-1.000/000000/00/origin/R1",
+            "scale-1.000/000000/00/origin/000001",
+            "scale-1.000/000000/00/origin/000000/extra",
+            "scale-1.000/000000/00/incar-000/origin/../outside",
         ):
             (stage / "tasks.json").write_text(json.dumps({"tasks": [task]}))
             with (
@@ -577,14 +611,16 @@ class TestSpinTasks(unittest.TestCase):
         submission = module.make_spin_submission(self.jdata, machine)
         task = submission.belonging_tasks[0]
         self.assertEqual(task.command, "vasp_ncl")
-        self.assertEqual(task.task_work_path, "scale-1.000/000000/00/000000")
+        self.assertEqual(task.task_work_path, "scale-1.000/000000/00/origin/000000")
         self.assertEqual(task.backward_files, ["OUTCAR", "OSZICAR", "vasprun.xml"])
         self.assertEqual(task.forward_files, ["POSCAR", "INCAR", "POTCAR", "KPOINTS"])
 
     def test_result_check_requires_both_outputs_and_normal_termination(self):
         module = self.module()
         path = self.prepare_run_inputs()
-        with self.assertRaisesRegex(FileNotFoundError, "scale-1.000/000000/00/000000"):
+        with self.assertRaisesRegex(
+            FileNotFoundError, "scale-1.000/000000/00/origin/000000"
+        ):
             module.check_spin_results(self.jdata)
         (path / "OUTCAR").write_text("TOTAL-FORCE\nElapse\n")
         (path / "OSZICAR").write_text("")
@@ -624,7 +660,7 @@ class TestSpinTasks(unittest.TestCase):
             any(
                 "not confirmed" in line
                 and "OUTCAR" in line
-                and "scale-1.000/000000/00/000000" in line
+                and "scale-1.000/000000/00/origin/000000" in line
                 for line in logs.output
             )
         )
@@ -647,7 +683,7 @@ class TestSpinTasks(unittest.TestCase):
                     contcar.write_text(text)
                 with self.assertRaisesRegex(
                     (FileNotFoundError, ValueError),
-                    "scale-1.000/000000/00/000000.*CONTCAR",
+                    "scale-1.000/000000/00/origin/000000.*CONTCAR",
                 ):
                     self.module().check_spin_results(self.jdata)
 
@@ -661,7 +697,7 @@ class TestSpinTasks(unittest.TestCase):
 
     def test_mixed_submission_automatically_retrieves_contcar_once(self):
         relax = self.prepare_relax_results()
-        static_task = "scale-1.000/000000/01/000000"
+        static_task = "scale-1.000/000000/01/origin/000000"
         self.prepare_run_inputs(static_task)
         paths = [relax.relative_to(self.root / "03.spin").as_posix(), static_task]
         (self.root / "03.spin/tasks.json").write_text(json.dumps({"tasks": paths}))

@@ -774,7 +774,8 @@ class TestSpinInitWorkflow(unittest.TestCase):
             param_path.write_text(
                 json.dumps(
                     {
-                        "stages": [5],
+                        "stages": [6],
+                        "out_dir": str(root),
                         "from_poscar_path": "POSCAR",
                         "super_cell": [1, 1, 1],
                         "scale": [1.0],
@@ -793,7 +794,7 @@ class TestSpinInitWorkflow(unittest.TestCase):
                     argparse.Namespace(PARAM=str(param_path), MACHINE=None)
                 )
 
-            self.assertIn("unknown spin_init stage 5", str(caught.exception))
+            self.assertIn("unknown spin_init stage 6", str(caught.exception))
 
     @mock.patch("dpgen.data.spin_init.make_spin_init_structures")
     def test_uses_nsw_from_md_incar_as_upstream_init_bulk_does(self, make_structures):

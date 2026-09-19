@@ -21,7 +21,7 @@
 
 ## 1. 总体数据流
 
-四个阶段按照下面的关系传递结构：
+五个阶段按照下面的关系传递结构和计算结果：
 
 ```text
 输入 POSCAR
@@ -36,10 +36,10 @@
 02.disp                         XDATCAR 中的每个 frame 转成独立 POSCAR
     │ POSCAR snapshots
     ▼
-03.spin                         对每个 snapshot 的初始磁矩进行独立分组扰动
+03.spin                         对每个 snapshot 的初始磁矩进行独立分组扰动并计算
     │ OUTCAR + OSZICAR
     ▼
-非共线磁性静态或结构/晶格优化计算结果
+04.data                         磁矩 RMSE 筛选、末帧提取、DeepMD raw/npy
 ```
 
 输出根目录就是 `param.json` 中的 `out_dir`，程序不会在名称后面自动增加后缀。例如：
@@ -56,7 +56,8 @@ run_spin/
 ├── 00.scale_pert/
 ├── 01.md/
 ├── 02.disp/
-└── 03.spin/
+├── 03.spin/
+└── 04.data/
 ```
 
 `param.json` 是原始输入参数文件的副本，便于以后追溯计算设置。它不是运行时规范化
@@ -123,8 +124,11 @@ Stage 3 从零开始为 XDATCAR frame 编号，最少使用两位数字：
 每个 snapshot 的每个初始 INCAR 模板始终包含一个未扰动磁矩基准构型：
 
 ```text
-000000
+origin/000000
 ```
+
+`origin` 是基准磁矩的分类层，与 `Rotation-000` 等分组并列。任务文件在其下的
+`000000/`，不在 `origin/` 本身；这个变化不影响 Stage 1–3 的数字编号。
 
 其他构型按 `pert_spin` 字段的模式和输入序号分组：
 
@@ -327,14 +331,15 @@ Stage 3 的两个检查相互独立：
 └── scale-1.000/
     └── 000000/
         └── 00/
-            ├── 000000/
-            │   ├── POSCAR
-            │   ├── POTCAR
-            │   ├── INCAR
-            │   ├── OUTCAR
-            │   ├── OSZICAR
-            │   ├── fp.log
-            │   └── [user_forward_files]
+            ├── origin/
+            │   └── 000000/
+            │       ├── POSCAR
+            │       ├── POTCAR
+            │       ├── INCAR
+            │       ├── OUTCAR
+            │       ├── OSZICAR
+            │       ├── fp.log
+            │       └── [user_forward_files]
             ├── Rotation-000/
             │   └── R1/
             │       └── ...
@@ -371,12 +376,13 @@ Stage 3 的两个检查相互独立：
     └── 000000/
         └── 00/
             ├── incar-000/
-            │   ├── 000000/
-            │   │   ├── POSCAR
-            │   │   ├── POTCAR
-            │   │   ├── INCAR
-            │   │   ├── OUTCAR
-            │   │   └── OSZICAR
+            │   ├── origin/
+            │   │   └── 000000/
+            │   │       ├── POSCAR
+            │   │       ├── POTCAR
+            │   │       ├── INCAR
+            │   │       ├── OUTCAR
+            │   │       └── OSZICAR
             │   ├── Rotation-000/
             │   │   └── R1/
             │   │       └── ...
@@ -391,8 +397,9 @@ Stage 3 的两个检查相互独立：
             │       └── S2/
             │           └── ...
             └── incar-001/
-                ├── 000000/
-                │   └── ...
+                ├── origin/
+                │   └── 000000/
+                │       └── ...
                 ├── Rotation-000/
                 │   └── R1/
                 │       └── ...
@@ -480,7 +487,7 @@ backward_files:
 ```json
 {
   "tasks": [
-    "scale-1.000/000000/00/incar-000/000000",
+    "scale-1.000/000000/00/incar-000/origin/000000",
     "scale-1.000/000000/00/incar-000/Rotation-000/R1",
     "scale-1.000/000000/00/incar-000/Canting-001/C1",
     "scale-1.000/000000/00/incar-000/Scale-002/S1"
@@ -490,6 +497,10 @@ backward_files:
 
 清单记录的是最终局部变体目录，不是 `Rotation-000` 等分类目录。建议保留原始清单，
 不要手工改动路径；这些路径必须对应真实目录并满足规定格式。
+
+新基准 task 的清单路径必须包含 `origin/000000`，不能只写 `origin`。
+旧版不含 `origin` 的基准路径和旧版未分组磁扰动路径仍可按清单运行，不会被自动改名
+或搬移。新布局只用于新生成的 `03.spin`。
 
 ## 7. 完整示例目录树
 
@@ -540,7 +551,7 @@ run_spin/
         ├── 000000/
         │   ├── 00/
         │   │   ├── incar-000/
-        │   │   │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        │   │   │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
         │   │   │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
         │   │   │   ├── Canting-001/
         │   │   │   │   ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
@@ -589,7 +600,7 @@ run_spin/
     = Nscale × (Npert + 1) × Nframe × Nincar × (Nspin + 1)
 ```
 
-最后的 `+1` 表示每个 snapshot 和每个初始 INCAR 都会保留 `000000` 基准磁矩构型。
+最后的 `+1` 表示每个 snapshot 和每个初始 INCAR 都会保留 `origin/000000` 基准磁矩构型。
 
 本文参数示例中，`Nspin = 1 + 2 + 2 = 5`，而不是 `1 × 2 × 2`。在三个 frame、
 两个 INCAR 模板和两个结构 task 的假设下，共有：
@@ -684,10 +695,10 @@ OSZICAR
 
 ## 11. 重要说明
 
-- `00.scale_pert`、`01.md`、`02.disp`、`03.spin` 的数字前缀表示数据处理顺序，不是计算编号。
+- `00.scale_pert`、`01.md`、`02.disp`、`03.spin`、`04.data` 的数字前缀表示数据处理顺序，不是计算编号。
 - Stage 2 的 `000000` 表示未随机扰动的结构，不代表第零个 AIMD frame。
 - Stage 3 的 `00` 表示 XDATCAR 的第一个 frame。
-- Stage 4 的 `000000` 表示未进行磁矩扰动的基准磁构型。
+- Stage 4 的 `origin/000000` 表示未进行磁矩扰动的基准磁构型。
 - 单个字符串形式的 `spin_incar` 不增加 INCAR 索引层；列表形式始终增加 `incar-###` 层。
 - 不同 `pert_spin` 字段独立作用于初始磁矩；`<模式>-<字段序号>` 是分类层，局部变体才是计算 task。
 - 同一字段内部的参数组合仍保留；只有 `Rota_Cant` 明确组合 Rotation 与 Canting。
@@ -697,7 +708,7 @@ OSZICAR
 - 保存或搬移输出时应保留整个阶段关系和符号链接。单独搬移 `01.md` 或 `03.spin`
   可能使 POSCAR 链接失效；指向输出根目录外的 user-forward 文件还需要保留源文件。
 - Stage 4 的独立 INCAR 中 `MAGMOM` 和 `M_CONSTR` 始终写成相同的三分量磁矩数组。
-- `spin_init` 不生成 `04.*` 或 DeepMD 数据集；当前输出终点是 `03.spin` 的磁性 VASP 结果。
+- Stage 5 读取 `03.spin/tasks.json` 与已完成的 VASP 输出，生成 `04.data/deepmd`；不会重新计算 VASP。
 
 ## 12. Stage 4 优化时的输出差异
 
@@ -725,3 +736,29 @@ task 被要求通过最终结构校验。CONTCAR 必须非空、可被 pymatgen 
 返回的正常结束 task 数也包含这些告警任务，不代表电子或磁矩收敛。
 具体输入及检查规则见
 [Stage 4 结构与晶格优化](doc/init/spin-init-usage.md#stage-4-结构与晶格优化)。
+
+## 13. `04.data`：RMSE 筛选后的 DeepMD 数据
+
+Stage 5 可单独使用 `"stages": [5]` 运行。它首先要求 `03.spin/tasks.json`
+中的所有任务正常结束，再对初始非零磁矩原子比较 INCAR/OUTCAR 末态磁矩模长。
+RMSE 大于 `5.0e-3` 的任务仅被筛除并记录；合格任务各贡献最后一个离子步。
+
+```text
+04.data/
+└── deepmd/
+    ├── selection.json              全局合格/淘汰任务和 RMSE
+    └── <元素组成>/                 相同组成及原子顺序的一组帧
+        ├── type.raw
+        ├── type_map.raw
+        ├── box.raw、coord.raw、energy.raw、force.raw
+        ├── spin.raw、spin_force.raw、spin_length.raw
+        ├── frames.json             每行到源 task/OUTCAR 帧的映射
+        └── set.000/
+            ├── box.npy、coord.npy、energy.npy、force.npy
+            └── spin.npy、spin_force.npy、spin_length.npy
+```
+
+`spin` 是末态磁矩的单位方向，`spin_length` 是未归一化的末态磁矩模长；
+`spin_force` 由最终 OSZICAR 的 `MW_int` 和 `lambda*MW_perp` 算出。
+VASP 5 使用系数 2，VASP 6 使用系数 1，随后乘 `|MW_int|`，不变号。
+磁性向量与 DPData 的晶格、坐标和原子力使用相同的旋转坐标系。

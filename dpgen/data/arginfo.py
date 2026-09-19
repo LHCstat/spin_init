@@ -60,7 +60,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 "stages",
                 list[int],
                 optional=False,
-                doc="Stages: 1 perturb, 2 create/run AIMD, 3 collect XDATCAR, 4 magnetic tasks.",
+                doc="Stages: 1 perturb, 2 create/run AIMD, 3 collect XDATCAR, 4 magnetic tasks, 5 magnetic data export.",
             ),
             Argument(
                 "from_poscar_path",
@@ -148,7 +148,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 doc="Stage 4: make, run (existing tasks), or make_run. Without MACHINE, make_run only prepares.",
             ),
         ],
-        doc="Generate VASP AIMD snapshots and static or relaxation spin tasks.",
+        doc="Generate VASP AIMD snapshots, spin tasks, and filtered magnetic data.",
     )
 
 

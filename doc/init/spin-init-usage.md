@@ -135,7 +135,7 @@ EDIFFG = -0.02
 
 ### `spin-init.json` 编写方式
 
-完整四阶段示例：
+前四阶段示例（需要导出数据时可在 `stages` 末尾添加 `5`）：
 
 ```json
 {
@@ -194,7 +194,9 @@ snapshot 与磁构型之间增加 `incar-000`、`incar-001`……层；即使列
 所有 INCAR 共用每个随机操作各自的连续 RNG 序列，不会分别重新 seed，所以随机结果
 不同但整体可以复现。
 
-每个快照的每个 INCAR 模板保留一个输入磁矩不变的基准构型 `000000`。
+每个快照的每个 INCAR 模板保留一个输入磁矩不变的基准构型，放在 `origin/000000/`。
+`origin` 是新增的分类层，与 `Rotation-000` 等模式分组并列；列表形式的多个 INCAR
+分别使用 `incar-###/origin/000000/`。上游结构扰动编号和 AIMD 快照编号不变。
 `pert_spin` 每项必须且只能包含一个
 模式，允许重复模式。不同字段独立作用于模板中的初始磁矩，不会使用前一个字段的
 结果；只有同一字段内部的参数列表保留笛卡尔组合。因此不同字段的构型数量相加，
@@ -267,11 +269,11 @@ INCAR 模板或 snapshot 重新设 seed，而是按稳定顺序连续推进。�
 字段的初始磁矩或随机数消耗次数。
 
 例如 Rotation 有 2 个 angle 和 2 个 axis、Canting 有 2 个 angle、Scale 使用上述
-10 个增量时，共产生 `4 + 2 + 10 = 16` 个独立扰动构型，另加共享基准 `000000`。
+10 个增量时，共产生 `4 + 2 + 10 = 16` 个独立扰动构型，另加共享基准 `origin/000000`。
 代表路径为：
 
 ```text
-03.spin/.../000000/INCAR
+03.spin/.../origin/000000/INCAR
 03.spin/.../Rotation-000/R1/INCAR
 03.spin/.../Rotation-000/R4/INCAR
 03.spin/.../Canting-001/C2/INCAR
@@ -361,27 +363,38 @@ out_dir/
 │       ├── 00/POSCAR
 │       ├── 01/POSCAR
 │       └── 02/POSCAR
-└── 03.spin/
-    ├── POTCAR
-    ├── tasks.json
-    └── scale-1.000/000000/00/
-        ├── incar-000/
-        │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        └── incar-001/
-            ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-            ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-            ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-            └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+├── 03.spin/
+│   ├── POTCAR
+│   ├── tasks.json
+│   └── scale-1.000/000000/00/
+│       ├── incar-000/
+│       │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       └── incar-001/
+│           ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│           ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│           ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│           └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+└── 04.data/deepmd/
+    ├── selection.json
+    └── <元素组成>/
+        ├── type.raw、type_map.raw、box.raw、coord.raw、energy.raw、force.raw
+        ├── spin.raw、spin_force.raw、spin_length.raw、frames.json
+        └── set.000/
+            ├── box.npy、coord.npy、energy.npy、force.npy
+            └── spin.npy、spin_force.npy、spin_length.npy
 ```
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR，包含优化
 任务的提交还自动回传 CONTCAR。用户配置的
 backward files 会在此基础上追加。`03.spin` 中 POSCAR/POTCAR 必须是真实相对符号链接，
 INCAR 则是每个磁构型自己的普通文件。上图展示列表写法；字符串写法不含
-`incar-###` 层，但同样具有磁扰动模式分组层。
+`incar-###` 层，但同样具有 `origin/000000/` 基准目录和磁扰动模式分组层。
+
+旧版清单中直接位于 `000000/` 的基准任务仍可用 `spin_action="run"` 提交。
+程序不会自动搬移旧任务或改写旧清单；新布局需要在新的输出目录中生成。
 
 ## 分阶段运行
 
@@ -404,7 +417,25 @@ dpgen spin_init spin-init.json machine.json
 扰动已有 `03.spin`。若要按新规则生成任务，请使用新的 `out_dir`；只运行 Stage 4 时，
 该根目录下必须先准备好对应的 `02.disp` 快照。
 
-## 当前未实现内容
+## Stage 5：磁矩筛选与 DeepMD 数据导出
 
-- 磁矩 RMSE 筛选；
-- DeepMD 的 `spin.npy`、`spin_force.npy` 数据转换。
+完成 `03.spin` 全部计算并回传 OUTCAR、OSZICAR 后，将 PARAM 改成
+`"stages": [5]`，运行 `dpgen spin_init PARAM`，无需 MACHINE；也可以在完整流程
+中使用 `"stages": [1, 2, 3, 4, 5]`。Stage 5 只读取现有
+`03.spin/tasks.json` 中的任务，不重新提交 VASP。参数文件仍须保留统一 schema
+规定的 POSCAR、MD INCAR、结构扰动等字段，但 Stage 5 不重新读取这些输入。
+
+每个任务只导出最后一个离子步。先检查所有磁性任务是否正常结束；任何任务缺失或
+未完成都会报出其路径，不会混同为 RMSE 淘汰。然后从各任务 INCAR 读取初始
+`MAGMOM`，从最终 OUTCAR 的 x/y/z 磁矩表读取末态磁矩，计算初始非零磁矩原子的
+模长 RMSE：`sqrt(mean((|M_initial| - |M_final|)^2))`。超过 `5.0e-3` 的任务
+只被排除，不影响其余合格任务，并记入 `selection.json`；没有合格任务则报错。
+
+结构、能量、原子力由 DPData 读取 OUTCAR；磁力由 OSZICAR 的最后一组
+`MW_int` 和 `lambda*MW_perp` 计算。VASP 5 对后者乘 2，VASP 6 不乘 2，
+再乘 `|MW_int|`，不额外变号。OUTCAR 会自动识别主版本。
+`spin.npy` 是末态磁矩的单位方向，`spin_length.npy` 另存末态模长，
+`spin_force.npy` 是相应磁力。三个磁性 raw 文件均保留，并与 `set.000`
+中的 npy 行顺序一致；`frames.json` 记录数据行、来源任务和最后帧编号。
+DPData 会旋转晶格坐标系，Stage 5 同步旋转磁矩和磁力，以保证向量一致。
+已有 `04.data` 不会被覆盖，重跑前应先检查并处理该目录。

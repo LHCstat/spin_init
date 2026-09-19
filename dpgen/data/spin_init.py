@@ -1,4 +1,4 @@
-"""Generate VASP AIMD snapshots and static tasks for spin initialization."""
+"""Generate VASP AIMD snapshots, spin tasks, and filtered magnetic data."""
 
 import os
 import shutil
@@ -368,7 +368,7 @@ def gen_spin_init(args):
     validate_spin_init_parameters(jdata)
     stages = [int(stage) for stage in jdata["stages"]]
     for stage in stages:
-        if stage not in (1, 2, 3, 4):
+        if stage not in (1, 2, 3, 4, 5):
             raise RuntimeError(f"unknown spin_init stage {stage}")
     perturb_count = 0
     perturb = None
@@ -435,3 +435,7 @@ def gen_spin_init(args):
                 make_spin_tasks(spin_jdata, spin_mdata, perturb=perturb)
             if mdata is not None and jdata["spin_action"] != "make":
                 run_spin_tasks(jdata, spin_mdata)
+        elif stage == 5:
+            from dpgen.data.spin_data import collect_spin_data
+
+            collect_spin_data(jdata)

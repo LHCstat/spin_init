@@ -1,14 +1,16 @@
 ## Spin initialization workflow
 
 `spin_init` is an independent VASP workflow. It preserves `init_bulk` and uses
-four stages:
+five stages:
 
 1. create scaled and structurally perturbed POSCARs in `00.scale_pert`;
 2. create/run VASP AIMD tasks in `01.md` and retrieve `OUTCAR` and `XDATCAR`;
 3. validate the AIMD result, parse `XDATCAR` with pymatgen, and export every
    frame as a POSCAR under `02.disp`;
 4. create/run baseline and independently perturbed noncollinear VASP
-   calculations for every exported snapshot under `03.spin`.
+   calculations for every exported snapshot under `03.spin`;
+5. filter final magnetic results and write DeepMD raw/npy data under
+   `04.data/deepmd`.
 
 ```bash
 dpgen spin_init PARAM [MACHINE]
@@ -74,7 +76,7 @@ exactly one mode, and repeated modes are allowed. Each block starts from the
 template's original moments, never from another block's result. Cartesian
 products apply only to parameter lists inside one block. The example creates
 `1 Rotation + 2 Canting + 2 Scale = 5` perturbed configurations, plus one
-unchanged `000000` baseline per snapshot/template.
+unchanged `origin/000000` baseline per snapshot/template.
 
 Groups are named by mode and zero-based input index: `Rotation-000`,
 `Canting-001`, `Scale-002`. Their local variants are placed in separate task
@@ -121,16 +123,17 @@ workflow accepts one initial POSCAR.
 00.scale_pert/scale-1.000/000000/POSCAR
 01.md/scale-1.000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,XDATCAR}
 02.disp/scale-1.000/000000/00/POSCAR
-03.spin/scale-1.000/000000/00/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/origin/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/Rotation-000/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/Canting-001/C1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/Scale-002/S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+04.data/deepmd/<formula>/{type.raw,coord.raw,spin.raw,spin_force.raw,spin_length.raw,set.000/}
 ```
 
 With a `spin_incar` list, the stage-4 paths instead become, for example:
 
 ```text
-03.spin/scale-1.000/000000/00/incar-000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/incar-000/origin/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/incar-001/Rotation-000/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 ```
 
@@ -139,8 +142,9 @@ symbolic links. Each stage-4 INCAR is a private regular file so a later magnetic
 perturbation can change it independently.
 
 Run-only still accepts saved task paths from earlier versions, including
-ungrouped composed names. Existing `03.spin` trees are not migrated or
-re-perturbed; use a new output root to generate the independent-group layout.
+baselines directly under `000000` and ungrouped composed names. Existing
+`03.spin` trees are not migrated or re-perturbed; use a new output root to
+generate the independent-group layout with the `origin/000000` baseline.
 For stage-4-only generation, that root must already contain the required
 `02.disp` snapshots.
 
@@ -189,5 +193,25 @@ as the input. Lattice and coordinates may change. The initial POSCAR symlink
 and its snapshot source are never replaced. A normal exit without VASP's
 structural convergence marker emits a warning, not a convergence claim;
 `check_spin_results` returns the normally terminated task count. This is not
-electronic/magnetic convergence or magnetic-quality validation. RMSE filtering
-and DeepMD spin-data conversion are not yet implemented.
+electronic/magnetic convergence or magnetic-quality validation.
+
+Stage 5 can be run alone with `"stages": [5]` after `03.spin` finishes, or
+included in `"stages": [1, 2, 3, 4, 5]`. It reads `03.spin/tasks.json` and
+requires every saved task to have normally completed before creating output.
+Each task contributes only its final ionic frame. DPData reads its standard
+structure, energy, and atomic-force labels; the final OUTCAR `magnetization
+(x/y/z)` and OSZICAR `MW_int`/`lambda*MW_perp` blocks supply magnetic labels.
+VASP 5 uses `2 * lambda*MW_perp`; VASP 6 uses `lambda*MW_perp`. Both are
+multiplied by `|MW_int|` without a sign change. Magnetic vectors are rotated
+to DPData's Cartesian basis before writing.
+
+For atoms with nonzero initial INCAR moments, the filter computes
+`sqrt(mean((|MAGMOM_initial| - |moment_final|)^2))`. Tasks above `5.0e-3` are
+listed in `04.data/deepmd/selection.json` and excluded; malformed or
+incomplete tasks raise an error. Accepted frames are grouped by composition
+and atom order. Each system directory retains ordinary DPData raw/npy files
+and aligned `spin.raw`, `spin_force.raw`, `spin_length.raw`, plus matching
+`set.000/*.npy` files. `spin` is the unit-vector direction (zero for exactly
+zero final moments); `spin_length` stores the original final magnitudes.
+`frames.json` maps each dataset row to its source task and OUTCAR frame.
+Stage 5 does not submit another VASP calculation or overwrite `03.spin`.

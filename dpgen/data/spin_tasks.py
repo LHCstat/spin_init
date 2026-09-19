@@ -23,6 +23,7 @@ from dpgen.dispatcher.Dispatcher import make_submission
 from dpgen.generator.lib.utils import check_api_version
 
 SPIN_DIR = "03.spin"
+_BASELINE_PATH = "origin/000000"
 _CONFIGURATION_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]*"
 _OPERATION_GROUP = r"(?:Rotation|Canting|Rota_Cant|Random|Scale)-\d{3,}"
 # Ungrouped names remain valid for saved tasks from earlier versions.
@@ -224,7 +225,7 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
     """Validate all inputs and return one task per snapshot/configuration.
 
     ``perturb(moments, count)`` returns a mapping of safe relative paths to N x 3
-    arrays. The baseline 000000 is always added here, not by the provider.
+    arrays. The baseline origin/000000 is added here, not by the provider.
     """
     from pymatgen.io.vasp.inputs import Poscar
 
@@ -264,7 +265,7 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
                 raise FileNotFoundError(f"{source_context}: {error}") from error
             except ValueError as error:
                 raise ValueError(f"{source_context}: {error}") from error
-            configs = {"000000": moments}
+            configs = {_BASELINE_PATH: moments}
             if count:
                 try:
                     extra = perturb(moments.copy(), count)
@@ -279,7 +280,7 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
                     if (
                         not isinstance(name, str)
                         or not re.fullmatch(_CONFIGURATION_PATH, name)
-                        or name == "000000"
+                        or name in {"000000", "origin"}
                     ):
                         raise ValueError(
                             f"{source_context}: invalid magnetic configuration "
@@ -344,7 +345,7 @@ def _saved_tasks(jdata):
     for task in paths:
         if not isinstance(task, str) or not re.fullmatch(
             rf"scale-[0-9]+(?:\.[0-9]+)?/\d{{6}}/\d{{2,}}/"
-            rf"(?:incar-\d{{3,}}/)?{_CONFIGURATION_PATH}",
+            rf"(?:incar-\d{{3,}}/)?(?:{_BASELINE_PATH}|{_CONFIGURATION_PATH})",
             task,
         ):
             raise ValueError(f"{manifest}: invalid task path {task!r}")

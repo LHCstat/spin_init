@@ -16,7 +16,7 @@ POSCAR
 
 这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、五种磁矩操作的独立
 分组、目录生成、符号链接、dpdispatcher 提交以及 OUTCAR/OSZICAR 回传检查。输入磁矩
-不变的基准构型始终命名为 `000000`。
+不变的基准构型始终放在 `origin/000000/`，与磁扰动模式分组并列。
 
 ## 2. 安装与检查
 
@@ -25,10 +25,10 @@ POSCAR
 ```bash
 git clone https://github.com/LHCstat/spin_init.git
 cd spin_init
-python3.9 -m venv venv
-source venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[test]"
+conda create -n spin_init python=3.9
+conda activate spin_init
+python -m pip install .
+python -m pip install oss2
 dpgen spin_init -h
 ```
 
@@ -117,7 +117,7 @@ LCHARG = .FALSE.
 
 `pert_spin` 是独立操作组列表：每项必须且只能写一个模式；同一模式可以重复。
 每个字段从模板的初始磁矩出发，不使用其他字段的结果；只有同一字段内部的参数列表
-保留笛卡尔组合。上例产生 `1 + 2 + 2 = 5` 个独立扰动构型，另有共享基准 `000000`。
+保留笛卡尔组合。上例产生 `1 + 2 + 2 = 5` 个独立扰动构型，另有共享基准 `origin/000000`。
 
 输出按模式和从零开始的字段输入序号分组：`Rotation-000/R1`、`Canting-001/C1`、
 `Canting-001/C2`、`Scale-002/S1`、`Scale-002/S2`。如果再次输入 Rotation，例如位于
@@ -223,12 +223,12 @@ run_spin/
 │   └── 02/POSCAR
 └── 03.spin/scale-1.000/000000/00/
     ├── incar-000/
-    │   ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+    │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
     │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
     │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
     │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
     └── incar-001/
-        ├── 000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+        ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
         ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
         ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
         └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
@@ -238,8 +238,9 @@ run_spin/
 是普通独立文件，每个局部变体目录写入对应的 MAGMOM/M_CONSTR。若 `spin_incar` 是单个
 字符串，则不会出现 `incar-###` 层；磁扰动的模式分组层仍按新规则生成。
 
-已有旧版未分组任务仍可使用 `spin_action="run"` 按清单提交；程序不会迁移或重新
-扰动已有 `03.spin`。要生成新分组布局，请使用新的 `out_dir`；若只运行 Stage 4，
+旧版直接位于 `000000/` 的基准任务和未分组扰动任务仍可使用 `spin_action="run"`
+按清单提交；程序不会迁移或重新扰动已有 `03.spin`。要生成含 `origin/000000/` 的
+新布局，请使用新的 `out_dir`；若只运行 Stage 4，
 需要先在该输出根目录下准备好对应的 `02.disp` 快照。
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR，包含优化
@@ -257,7 +258,19 @@ stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICA
 - DPCloudServerContext 报 `name 'oss2' is not defined` 时，安装
   `dpdispatcher[bohrium]`。当前代码会在提交前给出明确提示。
 
-## 8. 后续工作
+## 8. Stage 5：磁性数据筛选与导出
 
-- 实现磁矩 RMSE 筛选；
-- 转换 DeepMD 的 `spin.npy`、`spin_force.npy`。
+`03.spin` 中的 VASP 任务全部正常结束且 OUTCAR、OSZICAR 已回传后，
+将 PARAM 中的 `stages` 改为 `[5]`，执行：
+
+```bash
+dpgen spin_init spin-init.json
+```
+
+也可在完整流程中使用 `stages=[1,2,3,4,5]`。Stage 5 不需要 MACHINE、
+不再次运行 VASP。它使用每个任务最后一个离子步，比较初始 INCAR 与最终 OUTCAR
+中非零初始磁矩原子的模长，RMSE 超过 `5.0e-3` 的任务会被排除并写明原因。
+合格数据位于 `out_dir/04.data/deepmd/<元素组成>/`，包含标准 DeepMD raw/npy、
+`spin.raw`、`spin_force.raw`、`spin_length.raw` 和对应的 `set.000/*.npy`。
+`selection.json` 记录筛选结果，`frames.json` 映射数据行和来源任务。
+更多字段与版本约定见 [使用说明](doc/init/spin-init-usage.md#stage-5磁矩筛选与-deepmd-数据导出)。
