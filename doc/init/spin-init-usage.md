@@ -11,6 +11,7 @@ POSCAR
   → VASP AIMD
   → XDATCAR → 独立 POSCAR snapshots
   → 非共线磁性静态或优化 VASP task
+  → 磁矩 RMSE 筛选 → DeepMD 磁性数据
 ```
 
 命令为：
@@ -19,7 +20,7 @@ POSCAR
 dpgen spin_init PARAM [MACHINE]
 ```
 
-四个 stage 分别是：
+五个 stage 分别是：
 
 | stage | 作用 | 输出目录 |
 | --- | --- | --- |
@@ -27,6 +28,7 @@ dpgen spin_init PARAM [MACHINE]
 | 2 | 建立 AIMD task；提供 MACHINE 时提交 | `01.md` |
 | 3 | 检查 OUTCAR、解析 XDATCAR、导出快照 | `02.disp` |
 | 4 | 为每个快照建立/提交磁性静态或优化计算 | `03.spin` |
+| 5 | 检查磁性结果、按 RMSE 筛选并导出 DeepMD 数据 | `04.data` |
 
 ## 输入文件
 
@@ -328,6 +330,31 @@ INCAR 模板或 snapshot 重新设 seed，而是按稳定顺序连续推进。�
 }
 ```
 
+Stage 5 还需要一个独立的 `convert-data` 项，加入 MACHINE 顶层对象：
+
+```json
+{
+  "convert-data": [{
+  "machine": {
+    "batch_type": "Slurm",
+    "context_type": "local",
+    "local_root": "./",
+    "remote_root": "/path/to/work"
+  },
+  "resources": {
+    "number_node": 1,
+    "cpu_per_node": 2,
+    "group_size": 1,
+    "queue_name": "partition"
+  },
+  "command": "nequip-data -m -z 8"
+  }]
+}
+```
+
+按集群修改资源和命令；`convert-data` 也可写成单个对象。命令须读取每个 scale
+的 `data/` 并生成 `out/data.extxyz`，dpdispatcher 会回传该文件。
+
 `vasp.slurm` 放入 `user_forward_files` 只表示把文件传到 task 目录。command 明确
 写成 `sbatch vasp.slurm` 会调用 sbatch 提交该脚本，但普通 sbatch 入队后就返回，
 DPDispatcher 不会自动跟踪子作业的 VASP 完成状态，可能提前回传文件并触发结果检查。
@@ -377,14 +404,15 @@ out_dir/
 │           ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 │           ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 │           └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-└── 04.data/deepmd/
+└── 04.data/
     ├── selection.json
-    └── <元素组成>/
-        ├── type.raw、type_map.raw、box.raw、coord.raw、energy.raw、force.raw
-        ├── spin.raw、spin_force.raw、spin_length.raw、frames.json
-        └── set.000/
-            ├── box.npy、coord.npy、energy.npy、force.npy
-            └── spin.npy、spin_force.npy、spin_length.npy
+    └── scale-1.000/
+        ├── data -> 03.spin/scale-1.000/data
+        └── out/
+            ├── data.extxyz
+            ├── type.raw、type_map.raw、box.raw、coord.raw、energy.raw、force.raw
+            ├── force_mag.raw、spin.raw、virial.raw
+            └── set/{box,coord,energy,force,force_mag,spin,virial}.npy
 ```
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR，包含优化
@@ -420,22 +448,24 @@ dpgen spin_init spin-init.json machine.json
 ## Stage 5：磁矩筛选与 DeepMD 数据导出
 
 完成 `03.spin` 全部计算并回传 OUTCAR、OSZICAR 后，将 PARAM 改成
-`"stages": [5]`，运行 `dpgen spin_init PARAM`，无需 MACHINE；也可以在完整流程
-中使用 `"stages": [1, 2, 3, 4, 5]`。Stage 5 只读取现有
-`03.spin/tasks.json` 中的任务，不重新提交 VASP。参数文件仍须保留统一 schema
-规定的 POSCAR、MD INCAR、结构扰动等字段，但 Stage 5 不重新读取这些输入。
+`"stages": [5]`，运行 `dpgen spin_init PARAM MACHINE`；也可以在完整流程
+中使用 `"stages": [1, 2, 3, 4, 5]`。MACHINE 必须含 `convert-data`
+配置。Stage 5 不重新提交 VASP，但会通过 dpdispatcher 提交转换任务。
+参数文件仍须保留统一 schema 规定的 POSCAR、MD INCAR、结构扰动等字段，
+但 Stage 5 不重新读取这些输入。
 
-每个任务只导出最后一个离子步。先检查所有磁性任务是否正常结束；任何任务缺失或
+先检查所有磁性任务是否正常结束；任何任务缺失或
 未完成都会报出其路径，不会混同为 RMSE 淘汰。然后从各任务 INCAR 读取初始
 `MAGMOM`，从最终 OUTCAR 的 x/y/z 磁矩表读取末态磁矩，计算初始非零磁矩原子的
 模长 RMSE：`sqrt(mean((|M_initial| - |M_final|)^2))`。超过 `5.0e-3` 的任务
 只被排除，不影响其余合格任务，并记入 `selection.json`；没有合格任务则报错。
 
-结构、能量、原子力由 DPData 读取 OUTCAR；磁力由 OSZICAR 的最后一组
-`MW_int` 和 `lambda*MW_perp` 计算。VASP 5 对后者乘 2，VASP 6 不乘 2，
-再乘 `|MW_int|`，不额外变号。OUTCAR 会自动识别主版本。
-`spin.npy` 是末态磁矩的单位方向，`spin_length.npy` 另存末态模长，
-`spin_force.npy` 是相应磁力。三个磁性 raw 文件均保留，并与 `set.000`
-中的 npy 行顺序一致；`frames.json` 记录数据行、来源任务和最后帧编号。
-DPData 会旋转晶格坐标系，Stage 5 同步旋转磁矩和磁力，以保证向量一致。
+合格任务的 OUTCAR/OSZICAR 按 scale 编号作为 `convert-data` 的输入，
+由该程序生成每个 scale 的 `out/data.extxyz`。随后 `out2npy` 一步在
+`out/` 写入 `type_map.raw`、`type.raw`、`box.raw`、`coord.raw`、
+`energy.raw`、`force.raw`、`force_mag.raw`、`spin.raw`、`virial.raw`，
+并在 `out/set/` 写入相应 `.npy`。`energy.npy` 为一维逐帧数组，
+其他 `.npy` 为二维逐帧数组。raw 与 extxyz 均保留。
 已有 `04.data` 不会被覆盖，重跑前应先检查并处理该目录。
+若 Stage 5 在远端转换任务提交后中断，当前版本不会自动恢复原提交；
+再次运行前先检查远端任务状态，以免重复提交。

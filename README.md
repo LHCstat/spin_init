@@ -1,70 +1,258 @@
-<picture><source media="(prefers-color-scheme: dark)" srcset="./doc/_static/logo-dark.svg"><source media="(prefers-color-scheme: light)" srcset="./doc/_static/logo.svg"><img alt="DP-GEN logo" src="./doc/_static/logo.svg"></picture>
+# `spin_init` 使用说明
 
-______________________________________________________________________
+`spin_init` 从已有 POSCAR 出发，生成结构扰动、运行 VASP AIMD、将 XDATCAR 逐帧转为 POSCAR，再为每帧建立非共线磁性计算。最后可按磁矩偏差筛选结果，导出 DeepMD 磁性数据。
 
-# DP-GEN: A concurrent learning platform for the generation of reliable deep learning based potential energy models
-
-[![GitHub release](https://img.shields.io/github/release/deepmodeling/dpgen.svg?maxAge=86400)](https://github.com/deepmodeling/dpgen/releases/)
-[![doi:10.1016/j.cpc.2020.107206](https://img.shields.io/badge/DOI-10.1016%2Fj.cpc.2020.107206-blue)](https://doi.org/10.1016/j.cpc.2020.107206)
-[![Citations](https://citations.njzjz.win/10.1016/j.cpc.2020.107206)](https://badge.dimensions.ai/details/doi/10.1016/j.cpc.2020.107206)
-[![conda install](https://img.shields.io/conda/dn/conda-forge/dpgen?label=conda%20install)](https://anaconda.org/conda-forge/dpgen)
-[![pip install](https://img.shields.io/pypi/dm/dpgen?label=pip%20install)](https://pypi.org/project/dpgen)
-
-DP-GEN (Deep Potential GENerator) is a software written in Python, delicately designed to generate a deep learning based model of interatomic potential energy and force field. DP-GEN is dependent on [DeePMD-kit](https://github.com/deepmodeling/deepmd-kit/). With highly scalable interface with common softwares for molecular simulation, DP-GEN is capable to automatically prepare scripts and maintain job queues on HPC machines (High Performance Cluster) and analyze results.
-
-If you use this software in any publication, please cite:
-
-Yuzhi Zhang, Haidi Wang, Weijie Chen, Jinzhe Zeng, Linfeng Zhang, Han Wang, and Weinan E, DP-GEN: A concurrent learning platform for the generation of reliable deep learning based potential energy models, Computer Physics Communications, 2020, 253, 107206.
-
-## Highlighted features
-
-- **Accurate and efficient**: DP-GEN is capable to sample more than tens of million structures and select only a few for first principles calculation. DP-GEN will finally obtain a uniformly accurate model.
-- **User-friendly and automatic**: Users may install and run DP-GEN easily. Once successfully running, DP-GEN can dispatch and handle all jobs on HPCs, and thus there's no need for any personal effort.
-- **Highly scalable**: With modularized code structures, users and developers can easily extend DP-GEN for their most relevant needs. DP-GEN currently supports for HPC systems ([Slurm](https://slurm.schedmd.com/), [PBS](https://www.openpbs.org/), LSF and cloud machines), Deep Potential interface with DeePMD-kit, MD interface with [LAMMPS](https://www.lammps.org/), [Gromacs](http://www.gromacs.org/), [AMBER](https://ambermd.org/), Calypso and *ab-initio* calculation interface with [VASP](https://www.vasp.at/), [PWSCF](https://www.quantum-espresso.org/), [CP2K](https://www.cp2k.org/), [SIESTA](https://departments.icmab.es/leem/siesta/), [Gaussian](https://gaussian.com/), Abacus, [PWmat](http://www.pwmat.com/), etc. We're sincerely welcome and embraced to users' contributions, with more possibilities and cases to use DP-GEN.
-
-## Download and Install
-
-DP-GEN only supports Python 3.9 and above. You can [setup a conda/pip environment](https://docs.deepmodeling.com/faq/conda.html), and then use one of the following methods to install DP-GEN:
-
-- Install via pip: `pip install dpgen`
-- Install via conda: `conda install -c conda-forge dpgen`
-- Install from source code: `git clone https://github.com/deepmodeling/dpgen && pip install ./dpgen`
-
-To test if the installation is successful, you may execute
-
-```bash
-dpgen -h
+```text
+POSCAR → 00.scale_pert → 01.md (AIMD) → 02.disp (POSCAR snapshots)
+       → 03.spin (磁性 VASP 任务) → 04.data (筛选后的 DeepMD 数据)
 ```
 
-## Workflows and usage
+命令：
 
-DP-GEN contains the following workflows:
+```bash
+dpgen spin_init PARAM [MACHINE]
+```
 
-- [`dpgen run`](https://docs.deepmodeling.com/projects/dpgen/en/latest/run/): Main process of Deep Potential Generator.
-- [Init](https://docs.deepmodeling.com/projects/dpgen/en/latest/init/): Generating initial data.
-  - `dpgen init_bulk`: Generating initial data for bulk systems.
-  - `dpgen init_surf`: Generating initial data for surface systems.
-  - `dpgen init_reaction`: Generating initial data for reactive systems.
-  - `dpgen spin_init`: Generating perturbed VASP AIMD structures, exporting
-    XDATCAR snapshots, and preparing Canting-perturbed noncollinear spin tasks. See the
-    [Chinese quick-start guide](SPIN_INIT_GUIDE.md) and
-    [input/output reference](doc/init/spin-init-usage.md).
-- [`dpgen simplify`](https://docs.deepmodeling.com/projects/dpgen/en/latest/simplify/): Reducing the amount of existing dataset.
-- [`dpgen autotest`](https://docs.deepmodeling.com/projects/dpgen/en/latest/autotest/): Autotest for Deep Potential.
+`PARAM` 是工作流参数 JSON；`MACHINE` 是通过 DPDispatcher 提交 VASP 时使用的机器配置 JSON。可以逐阶段运行，也可以在已配置好 VASP 和机器后连续运行。`spin_init` 不改变原有 `dpgen init_bulk`。
 
-For detailed usage and parameters, read [DP-GEN documentation](https://docs.deepmodeling.com/projects/dpgen/).
+## 1. 安装与运行条件
 
-## Tutorials and examples
+推荐在目标 Linux 集群的 Python 3.9 环境安装本仓库版本，而不是安装 PyPI 上的上游 `dpgen`：
 
-- [Tutorials](https://tutorials.deepmodeling.com/en/latest/Tutorials/DP-GEN/): basic tutorials for DP-GEN.
-- [Examples](examples): input files in [JSON](https://docs.python.org/3/library/json.html) format.
-- [Publications](https://blogs.deepmodeling.com/papers/dpgen/): Published research articles using DP-GEN.
-- [User guide](https://docs.deepmodeling.com/projects/dpgen/en/latest/user-guide/): frequently asked questions listed in troubleshooting.
+```bash
+git clone https://github.com/LHCstat/spin_init.git
+cd spin_init
+conda create -n spin_init python=3.9
+conda activate spin_init
+python -m pip install .
+dpgen spin_init -h
+```
 
-## License
+提交计算还需要可用的 VASP、计算资源和 DPDispatcher 配置。使用 Bohrium/DPCloudServerContext 时，另安装 `python -m pip install "dpdispatcher[bohrium]"`。Stage 2 和 4 的任务目录使用真实符号链接；正式运行请使用允许创建 symlink 的 Linux 环境。
 
-The project dpgen is licensed under [GNU LGPLv3.0](./LICENSE).
+## 2. 准备输入文件
 
-## Contributing
+一个最小的工作目录可以是：
 
-DP-GEN is maintained by [DeepModeling's developers](https://docs.deepmodeling.com/projects/dpgen/en/latest/credits.html). Contributors are always welcome.
+```text
+work/
+├── POSCAR            初始结构
+├── INCAR.md          AIMD 的 INCAR
+├── INCAR.spin        磁性计算的 INCAR 模板
+├── POTCAR            赝势；也可用多个片段
+├── KPOINTS           如 VASP 命令需要，通过 machine.json 转发
+├── param_spin.json   spin_init 参数
+└── machine.json      提交 VASP 时使用
+```
+
+`INCAR.md` 和 `INCAR.spin` 是两个不同的输入。前者只用于 AIMD；后者提供初始磁矩并用于 Stage 4。`POSCAR` 中的原子顺序、`POTCAR` 的元素顺序以及磁矩分量顺序必须对应。以下 INCAR 仅用于说明字段，VASP 参数应按具体体系调整。
+
+`INCAR.md` 的短 AIMD 示例：
+
+```text
+SYSTEM = spin_init_md
+ENCUT = 500
+EDIFF = 1E-5
+IBRION = 0
+NSW = 2
+POTIM = 1.0
+TEBEG = 300
+TEEND = 300
+SMASS = 0
+ISMEAR = 1
+SIGMA = 0.1
+```
+
+`INCAR.spin` 的二原子、静态计算示例：
+
+```text
+SYSTEM = spin_init_static
+ENCUT = 500
+EDIFF = 1E-6
+NSW = 0
+IBRION = -1
+LNONCOLLINEAR = .TRUE.
+I_CONSTRAINED_M = 2
+LAMBDA = 10
+MAGMOM = 0 0 2  0 0 0
+M_CONSTR = 0 0 2  0 0 0
+```
+
+正确的 VASP 标签是 `MAGMOM`，不是 `MAMGOM`。`MAGMOM` 和 `M_CONSTR` 均需为每个原子提供三个笛卡尔分量，初始值相同。程序会为每个磁扰动任务生成独立的 INCAR，并保持这两组磁矩同步。零初始磁矩在扰动后仍为零。若 Stage 4 需要结构或晶格优化，可自行设置 `NSW>0`、`IBRION`、`ISIF`、`EDIFFG`；程序不会强行改为静态计算。优化时会回传 `CONTCAR`，但正常退出不等于确认优化收敛。
+
+## 3. 编写 `param_spin.json`
+
+下面是从结构到数据导出的完整配置示例；它假设 POSCAR 与 INCAR 中的磁矩数量一致：
+
+```json
+{
+  "stages": [1, 2, 3, 4, 5],
+  "from_poscar_path": "./POSCAR",
+  "out_dir": "./run_spin",
+  "super_cell": [1, 1, 1],
+  "scale": [1.0],
+  "pert_numb": 1,
+  "pert_box": 0.03,
+  "pert_atom": 0.01,
+  "md_incar": "./INCAR.md",
+  "md_nstep": 2,
+  "spin_incar": "./INCAR.spin",
+  "pert_spin": [
+    {"Canting": {"angle": 30, "seed": 12345}}
+  ],
+  "spin_action": "make_run",
+  "potcars": ["./POTCAR"]
+}
+```
+
+| 字段 | 写法与作用 |
+| --- | --- |
+| `stages` | 要执行的阶段，编号 1–5；可仅写 `[5]` 导出已完成的计算 |
+| `from_poscar_path` | 已有 POSCAR 的路径 |
+| `out_dir` | 输出根目录，名称按原值使用，不追加后缀 |
+| `super_cell` | 三个正整数，例如 `[2, 2, 2]` |
+| `scale` | 正的晶胞缩放因子列表，例如 `[0.98, 1.0, 1.02]` |
+| `pert_numb` | 每个 scale 下的随机扰动结构数；另保留一个未随机扰动的 `000000` |
+| `pert_box`、`pert_atom` | 晶胞与原子位置扰动幅度；结构扰动沿用 `init_bulk` 算法 |
+| `md_incar`、`md_nstep` | AIMD INCAR 和预期步数；若 `NSW` 不同，以 INCAR 的 `NSW` 为准 |
+| `spin_incar` | 一个磁性 INCAR 路径，或多个路径组成的非空列表 |
+| `pert_spin` | 磁矩扰动组列表，每项只能指定一个模式；也可为空列表，只生成 `origin` 基准任务 |
+| `spin_action` | Stage 4 的 `make`、`run` 或 `make_run` |
+| `potcars` | 按 POSCAR 元素顺序排列的 POTCAR 片段路径列表 |
+
+有多个初始磁矩方案时，将 `spin_incar` 写为 `"spin_incar": ["./INCAR.state_1", "./INCAR.state_2"]`。每个模板分别生成一套基准和磁扰动任务，输出中增加 `incar-000`、`incar-001` 层；即使列表只有一个文件，也会有 `incar-000`。使用单个字符串时没有这一层。
+
+### 五种磁矩扰动模式
+
+```json
+{
+  "pert_spin": [
+    {"Rotation": {"angle": [45, 90], "axis": [0, 0, 1]}},
+    {"Canting": {"angle": [30, 60], "seed": 12345}},
+    {"Rota_Cant": {"R_angle": 30, "axis": [0, 1, 0], "C_angle": 45, "seed": 12345}},
+    {"Random": {"num": 3, "seed": 12345}},
+    {"Scale": {"pert": 0.10, "pert_step": 0.05}}
+  ]
+}
+```
+
+- `Rotation`：将每个磁矩绕给定 `axis` 按右手定则旋转 `angle` 度，保持模长。
+- `Canting`：每个非零磁矩与原方向成指定 `angle` 度，方位角分别随机抽取，保持模长。
+- `Rota_Cant`：固定先执行 Rotation，再执行 Canting。
+- `Random`：为每个非零磁矩随机取方向并保持模长；`num` 指生成的构型数。
+- `Scale`：只改变模长，按非零相对增量 `δ` 计算 `m'=(1+δ)m`；增量从 `-pert` 到 `+pert`，步长为 `pert_step`，不保留零增量。
+
+每个 `pert_spin` 项都**从原始模板磁矩独立出发**，不会把上一项的结果作为下一项输入。输出任务数是各项变体数之和，再加一个 `origin/000000`；同一项内部的列表参数才做笛卡尔组合。`Canting`、`Rota_Cant`、`Random` 可用 `seed` 复现随机序列。旧参数 `Rcut` 和 `direction` 不再使用。
+
+## 4. 编写 `machine.json`
+
+沿用 `init_bulk` 的嵌套 `fp` 配置；若磁性计算要使用不同 VASP 命令，可增加同结构的 `spin` 项。以下 `remote_root`、分区、CPU 数和命令都需要按自己的集群修改：
+
+```json
+{
+  "api_version": "1.0",
+  "fp": {
+    "machine": {
+      "batch_type": "Slurm",
+      "context_type": "local",
+      "local_root": "./",
+      "remote_root": "/path/to/dpdispatcher/work"
+    },
+    "resources": {
+      "number_node": 1,
+      "cpu_per_node": 32,
+      "group_size": 1,
+      "queue_name": "your_partition"
+    },
+    "command": "srun vasp_std",
+    "user_forward_files": ["/path/to/KPOINTS"],
+    "user_backward_files": []
+  },
+  "spin": {
+    "machine": {
+      "batch_type": "Slurm",
+      "context_type": "local",
+      "local_root": "./",
+      "remote_root": "/path/to/dpdispatcher/work"
+    },
+    "resources": {
+      "number_node": 1,
+      "cpu_per_node": 32,
+      "group_size": 1,
+      "queue_name": "your_partition"
+    },
+    "command": "srun vasp_ncl",
+    "user_forward_files": ["/path/to/KPOINTS"],
+    "user_backward_files": []
+  },
+  "convert-data": [{
+    "machine": {
+      "batch_type": "Slurm",
+      "context_type": "local",
+      "local_root": "./",
+      "remote_root": "/path/to/dpdispatcher/work"
+    },
+    "resources": {
+      "number_node": 1,
+      "cpu_per_node": 2,
+      "group_size": 1,
+      "queue_name": "your_partition"
+    },
+    "command": "nequip-data -m -z 8"
+  }]
+}
+```
+
+未配置 `spin` 时 Stage 4 复用 `fp`。旧式扁平 `fp_*` 配置也兼容。Stage 5 的 `convert-data` 可写成示例中的单项列表，也可直接写成对象；其命令必须从每个 scale 的 `data/` 生成 `out/data.extxyz`。示例分区、资源和路径均需按集群修改。将 `vasp.slurm` 放入 `user_forward_files` 仅表示把文件带入任务目录；只有把命令写成 `sbatch vasp.slurm` 才会实际提交该脚本。普通 `sbatch` 入队后立即返回，可能导致 DPDispatcher 过早回传，推荐由 DPDispatcher 管理 Slurm 作业并在其中直接执行 `srun vasp_std` 或 `srun vasp_ncl`。
+
+## 5. 运行与分阶段检查
+
+首次使用建议逐阶段执行。每次将 `param_spin.json` 中的 `stages` 设置为对应值；Stage 4 的 `spin_action` 也按下表设置：
+
+| 阶段 | `stages` 与命令 | 完成后检查 |
+| --- | --- | --- |
+| 1 结构扰动 | `[1]`；`dpgen spin_init param_spin.json` | `00.scale_pert/scale-*/000000/POSCAR` 等文件 |
+| 2 AIMD | `[2]`；`dpgen spin_init param_spin.json machine.json` | 每个 `01.md` task 的 `OUTCAR`、`XDATCAR` 已回传 |
+| 3 快照 | `[3]`；`dpgen spin_init param_spin.json` | `02.disp/.../00/POSCAR` 等快照 |
+| 4 建任务 | `[4]` 且 `spin_action="make"`；不传 MACHINE | `03.spin/tasks.json`、`origin/000000/INCAR` 等 |
+| 4 运行任务 | `[4]` 且 `spin_action="run"`；传 MACHINE | `03.spin` 每个 task 的 `OUTCAR`、`OSZICAR` |
+| 5 导出数据 | `[5]`；`dpgen spin_init param_spin.json machine.json` | `04.data/selection.json`、各 scale 的 `out/data.extxyz`、raw/npy |
+
+Stage 2 不传 MACHINE 时只建 AIMD 目录，不提交计算。Stage 4 的 `make_run` 在传 MACHINE 时建目录后提交，不传时只建目录。若机器、VASP 与 `convert-data` 已配置好，也可使用 `"stages": [1, 2, 3, 4, 5]` 和 `spin_action="make_run"` 一次执行。Stage 3 会分别检查 MD 是否完整结束、XDATCAR 是否能解析。Stage 5 不运行 VASP，但需要 MACHINE 中的 `convert-data` 配置来提交 `nequip-data`；它要求 `03.spin/tasks.json` 中所有任务已正常结束。已有的阶段输出目录不会被静默覆盖；重跑已有 Stage 4 任务请使用 `spin_action="run"`。
+
+## 6. 输出与是否成功的判断
+
+```text
+run_spin/
+├── param.json
+├── 00.scale_pert/scale-1.000/000000/POSCAR
+├── 01.md/scale-1.000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,XDATCAR}
+├── 02.disp/scale-1.000/000000/00/POSCAR
+├── 03.spin/
+│   ├── POTCAR
+│   ├── tasks.json
+│   └── scale-1.000/000000/00/origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+├── 03.spin/scale-1.000/data/{OUTCAR-1,OSZICAR-1,...}  # 相对符号链接
+└── 04.data/
+    ├── selection.json
+    └── scale-1.000/
+        ├── data -> 03.spin/scale-1.000/data
+        └── out/{data.extxyz,*.raw,set/*.npy}
+```
+
+`01.md` 和 `03.spin` task 的 POSCAR/POTCAR 是真实相对 symlink，不是普通副本。`03.spin` 的磁扰动任务与 `origin/` 同级分组，例如 `Canting-000/C1/`；多个 `spin_incar` 时，在 `00/` 与各组之间增加 `incar-000/` 等层。目录中的 `OUTCAR`、`XDATCAR`、`OSZICAR` 只有计算完成且回传后才存在。
+
+Stage 5 比较初始 INCAR 与最终 OUTCAR 中**初始磁矩非零的原子**的磁矩模长，计算 `RMSE = sqrt(mean((|m_initial| - |m_final|)^2))`；大于 `5.0e-3` 的任务会记录在 `selection.json`，但不进入转换输入。通过筛选的 OUTCAR/OSZICAR 按 scale 编号收集；`convert-data` 生成 `out/data.extxyz`，随后 `out2npy` 一步生成并保留 raw 和 `set/*.npy`（`energy.npy` 为一维）。全部被筛除时会报错，而不是生成空数据集。
+
+详细编号、单/多 INCAR 目录差异、文件来源及 Stage 5 文件树见 [输出目录结构详解](SPIN_INIT_OUTPUT_STRUCTURE.md)。
+
+## 7. 常见问题
+
+- `dpgen spin_init` 不被识别：确认在当前环境安装的是本仓库，并运行 `python -m pip show dpgen` 检查安装位置。
+- 导入时提示 `numpy.dtype size changed`：当前 NumPy 与 h5py 二进制版本不兼容；在同一个环境中安装相容版本。
+- Bohrium 上传时报 `name 'oss2' is not defined`：安装 `dpdispatcher[bohrium]`。
+- Stage 3 报缺少 XDATCAR：先确认 VASP 在计算节点生成了 XDATCAR，以及 DPDispatcher 是否把它回传到对应 `01.md` task。
+- Stage 4 报磁矩数量不符：检查 POSCAR 原子数，以及 `MAGMOM` 和 `M_CONSTR` 的 `3 × 原子数` 个分量。
+- Linux 之外出现 `WinError 1314`：这是 Windows 符号链接权限限制，不能通过把 POSCAR/POTCAR 改为 copy 来规避设计要求。
+
+更多参数和计算检查细节见 [详细输入参考](doc/init/spin-init-usage.md)。

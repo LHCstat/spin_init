@@ -209,7 +209,7 @@ class TestSpinDataCollector(unittest.TestCase):
                 spin_data.collect_spin_data({"out_dir": str(root)})
             self.assertEqual(sentinel.read_text(), "existing")
 
-    def test_cli_stage_five_requires_no_machine_or_md_incar_file(self):
+    def test_cli_stage_five_requires_convert_machine_but_not_md_incar_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             param = root / "param.json"
@@ -230,8 +230,7 @@ class TestSpinDataCollector(unittest.TestCase):
                     }
                 )
             )
-            with mock.patch("dpgen.data.spin_data.collect_spin_data") as collector:
+            with self.assertRaisesRegex(ValueError, "convert-data"):
                 spin_init.gen_spin_init(
                     argparse.Namespace(PARAM=str(param), MACHINE=None)
                 )
-            collector.assert_called_once()

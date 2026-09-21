@@ -39,7 +39,7 @@
 03.spin                         对每个 snapshot 的初始磁矩进行独立分组扰动并计算
     │ OUTCAR + OSZICAR
     ▼
-04.data                         磁矩 RMSE 筛选、末帧提取、DeepMD raw/npy
+04.data                         末态磁矩 RMSE 筛选、extxyz 多帧转换为 raw/npy
 ```
 
 输出根目录就是 `param.json` 中的 `out_dir`，程序不会在名称后面自动增加后缀。例如：
@@ -477,6 +477,7 @@ forward_files:
 backward_files:
   OUTCAR
   OSZICAR
+  CONTCAR（包含标准优化任务时自动追加）
   + spin.user_backward_files（存在 spin 配置时）
   或 fp.user_backward_files（复用 fp 时）
 ```
@@ -544,34 +545,45 @@ run_spin/
 │           ├── 01/POSCAR
 │           └── 02/POSCAR
 │
-└── 03.spin/
-    ├── POTCAR
-    ├── tasks.json
+├── 03.spin/
+│   ├── POTCAR
+│   ├── tasks.json
+│   └── scale-1.000/
+│       ├── 000000/
+│       │   ├── 00/
+│       │   │   ├── incar-000/
+│       │   │   │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   │   ├── Canting-001/
+│       │   │   │   │   ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   │   │   └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   │   └── Scale-002/
+│       │   │   │       ├── S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   │       └── S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   └── incar-001/
+│       │   │       └── ...
+│       │   ├── 01/
+│       │   │   └── ...
+│       │   └── 02/
+│       │       └── ...
+│       └── 000001/
+│           ├── 00/
+│           │   └── ...
+│           ├── 01/
+│           │   └── ...
+│           └── 02/
+│               └── ...
+
+└── 04.data/
+    ├── selection.json
     └── scale-1.000/
-        ├── 000000/
-        │   ├── 00/
-        │   │   ├── incar-000/
-        │   │   │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   │   │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   │   │   ├── Canting-001/
-        │   │   │   │   ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   │   │   │   └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   │   │   └── Scale-002/
-        │   │   │       ├── S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   │   │       └── S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        │   │   └── incar-001/
-        │   │       └── ...
-        │   ├── 01/
-        │   │   └── ...
-        │   └── 02/
-        │       └── ...
-        └── 000001/
-            ├── 00/
-            │   └── ...
-            ├── 01/
-            │   └── ...
-            └── 02/
-                └── ...
+        ├── data -> 03.spin/scale-1.000/data
+        └── out/
+            ├── data.extxyz
+            ├── type.raw、type_map.raw
+            ├── box.raw、coord.raw、energy.raw、force.raw
+            ├── force_mag.raw、spin.raw、virial.raw
+            └── set/{box,coord,energy,force,force_mag,spin,virial}.npy
 ```
 
 ## 8. 数量关系
@@ -610,6 +622,8 @@ run_spin/
 ```
 
 如果不同 AIMD task 的 frame 数量不同，则 `02.disp` 和 `03.spin` 的实际数量应分别对每个 task 的 frame 数量求和。
+`04.data` 的实际帧数由 `convert-data` 回传的 `data.extxyz` 决定；RMSE
+按每个 task 的末态磁矩筛选整个 task，不会假定每个合格 task 恰好只贡献一帧。
 
 ## 9. 分阶段运行时的目录依赖
 
@@ -621,6 +635,7 @@ run_spin/
 | Stage 4 `make` | 完整 `02.disp`、一个或多个 `spin_incar`、POTCAR | 新建 `03.spin` |
 | Stage 4 `run` | 已存在且包含有效 `tasks.json` 的 `03.spin` | 提交已有 task，不重建目录 |
 | Stage 4 `make_run` | 与 `make` 相同 | 新建后提交；未传 MACHINE 时只建立目录 |
+| Stage 5 | `03.spin/tasks.json`、全部 task 正常结束且 OUTCAR/OSZICAR 已回传、MACHINE 含 `convert-data` | 新建 `04.data/scale-*/out`；提交转换任务，不提交 VASP |
 
 各阶段不会静默覆盖同名阶段目录。例如 `02.disp` 已存在时再次执行 Stage 3 会明确报错；`03.spin` 已存在时应使用 `spin_action="run"` 提交已有任务。
 
@@ -693,6 +708,17 @@ OUTCAR
 OSZICAR
 ```
 
+### 10.6 检查磁性数据导出
+
+```bash
+python -m json.tool run_spin/04.data/selection.json
+find run_spin/04.data -path '*/out/data.extxyz' -type f
+find run_spin/04.data -path '*/out/set/spin.npy' -type f
+```
+
+`selection.json` 的 `selected` 为合格 task，`rejected` 为 RMSE 超阈值 task；
+每个 scale 下的 `out/set/*.npy` 应具有相同的第一维；`energy.npy` 为一维。
+
 ## 11. 重要说明
 
 - `00.scale_pert`、`01.md`、`02.disp`、`03.spin`、`04.data` 的数字前缀表示数据处理顺序，不是计算编号。
@@ -708,7 +734,7 @@ OSZICAR
 - 保存或搬移输出时应保留整个阶段关系和符号链接。单独搬移 `01.md` 或 `03.spin`
   可能使 POSCAR 链接失效；指向输出根目录外的 user-forward 文件还需要保留源文件。
 - Stage 4 的独立 INCAR 中 `MAGMOM` 和 `M_CONSTR` 始终写成相同的三分量磁矩数组。
-- Stage 5 读取 `03.spin/tasks.json` 与已完成的 VASP 输出，生成 `04.data/deepmd`；不会重新计算 VASP。
+- Stage 5 读取 `03.spin/tasks.json` 与已完成的 VASP 输出，通过 MACHINE 的 `convert-data` 任务回传 extxyz，再生成 `04.data/scale-*/out`；不会重新计算 VASP。
 
 ## 12. Stage 4 优化时的输出差异
 
@@ -737,28 +763,38 @@ task 被要求通过最终结构校验。CONTCAR 必须非空、可被 pymatgen 
 具体输入及检查规则见
 [Stage 4 结构与晶格优化](doc/init/spin-init-usage.md#stage-4-结构与晶格优化)。
 
-## 13. `04.data`：RMSE 筛选后的 DeepMD 数据
+## 13. `04.data`：RMSE 筛选与 extxyz 转换
 
-Stage 5 可单独使用 `"stages": [5]` 运行。它首先要求 `03.spin/tasks.json`
-中的所有任务正常结束，再对初始非零磁矩原子比较 INCAR/OUTCAR 末态磁矩模长。
-RMSE 大于 `5.0e-3` 的任务仅被筛除并记录；合格任务各贡献最后一个离子步。
+Stage 5 可单独以 `"stages": [5]` 运行，但需要 MACHINE 中的 `convert-data`
+配置。它要求 `03.spin/tasks.json` 中的任务正常结束，再对初始非零磁矩原子比较
+INCAR/OUTCAR 磁矩模长。RMSE 为 `sqrt(mean((|m_initial|-|m_final|)^2))`，
+阈值 `5.0e-3`。不合格任务只记录在 `selection.json`，不会送入转换。
 
 ```text
+03.spin/scale-1.000/data/
+├── OUTCAR-1 -> 合格磁性任务的 OUTCAR
+└── OSZICAR-1 -> 同一任务的 OSZICAR
 04.data/
-└── deepmd/
-    ├── selection.json              全局合格/淘汰任务和 RMSE
-    └── <元素组成>/                 相同组成及原子顺序的一组帧
-        ├── type.raw
-        ├── type_map.raw
+├── selection.json
+└── scale-1.000/
+    ├── data -> 03.spin/scale-1.000/data
+    └── out/
+        ├── data.extxyz
+        ├── type_map.raw、type.raw
         ├── box.raw、coord.raw、energy.raw、force.raw
-        ├── spin.raw、spin_force.raw、spin_length.raw
-        ├── frames.json             每行到源 task/OUTCAR 帧的映射
-        └── set.000/
+        ├── force_mag.raw、spin.raw、virial.raw
+        └── set/
             ├── box.npy、coord.npy、energy.npy、force.npy
-            └── spin.npy、spin_force.npy、spin_length.npy
+            └── force_mag.npy、spin.npy、virial.npy
 ```
 
-`spin` 是末态磁矩的单位方向，`spin_length` 是未归一化的末态磁矩模长；
-`spin_force` 由最终 OSZICAR 的 `MW_int` 和 `lambda*MW_perp` 算出。
-VASP 5 使用系数 2，VASP 6 使用系数 1，随后乘 `|MW_int|`，不变号。
-磁性向量与 DPData 的晶格、坐标和原子力使用相同的旋转坐标系。
+`convert-data` 在各 scale 的 `data/` 输入上运行，回传 `out/data.extxyz`；
+`out2npy` 一步产生同目录的 raw 与 `set/*.npy`。每个 raw 数值文件每帧一行；
+`energy.npy` 是形状为 `(帧数,)` 的一维数组。`spin` 由
+`spin_length × initial_magmoms` 得到，`force_mag` 对应
+`spin_forces_vert`，`virial = -体积 × stress`。
+
+`selection.json` 含 `rmse_limit`、`selected`、`rejected`；合格记录包括
+来源 task、scale、该 scale 内的编号和 RMSE。任务缺失或未正常完成会报错，
+不会当成 RMSE 淘汰；全部任务被筛除时也不会生成空数据集。
+已有 `04.data` 不会被覆盖。

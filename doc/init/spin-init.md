@@ -9,8 +9,8 @@ five stages:
    frame as a POSCAR under `02.disp`;
 4. create/run baseline and independently perturbed noncollinear VASP
    calculations for every exported snapshot under `03.spin`;
-5. filter final magnetic results and write DeepMD raw/npy data under
-   `04.data/deepmd`.
+5. filter tasks by final magnetic moments, run `convert-data`, and write
+   magnetic raw/npy data under `04.data/scale-*/out`.
 
 ```bash
 dpgen spin_init PARAM [MACHINE]
@@ -127,7 +127,10 @@ workflow accepts one initial POSCAR.
 03.spin/scale-1.000/000000/00/Rotation-000/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/Canting-001/C1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/000000/00/Scale-002/S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
-04.data/deepmd/<formula>/{type.raw,coord.raw,spin.raw,spin_force.raw,spin_length.raw,set.000/}
+03.spin/scale-1.000/data/{OUTCAR-1,OSZICAR-1,...}
+04.data/selection.json
+04.data/scale-1.000/data -> 03.spin/scale-1.000/data
+04.data/scale-1.000/out/{data.extxyz,type.raw,coord.raw,spin.raw,force_mag.raw,set/}
 ```
 
 With a `spin_incar` list, the stage-4 paths instead become, for example:
@@ -169,7 +172,13 @@ shape and override the stage-4 command:
     "resources": {"number_node": 1, "cpu_per_node": 32, "group_size": 1},
     "command": "srun vasp_ncl",
     "user_forward_files": ["KPOINTS"]
-  }
+  },
+  "convert-data": [{
+    "machine": {"batch_type": "Slurm", "context_type": "local",
+                "local_root": "./", "remote_root": "/path/to/work"},
+    "resources": {"number_node": 1, "cpu_per_node": 2, "group_size": 1},
+    "command": "nequip-data -m -z 8"
+  }]
 }
 ```
 
@@ -196,22 +205,23 @@ structural convergence marker emits a warning, not a convergence claim;
 electronic/magnetic convergence or magnetic-quality validation.
 
 Stage 5 can be run alone with `"stages": [5]` after `03.spin` finishes, or
-included in `"stages": [1, 2, 3, 4, 5]`. It reads `03.spin/tasks.json` and
-requires every saved task to have normally completed before creating output.
-Each task contributes only its final ionic frame. DPData reads its standard
-structure, energy, and atomic-force labels; the final OUTCAR `magnetization
-(x/y/z)` and OSZICAR `MW_int`/`lambda*MW_perp` blocks supply magnetic labels.
-VASP 5 uses `2 * lambda*MW_perp`; VASP 6 uses `lambda*MW_perp`. Both are
-multiplied by `|MW_int|` without a sign change. Magnetic vectors are rotated
-to DPData's Cartesian basis before writing.
+included in `"stages": [1, 2, 3, 4, 5]`. It requires a MACHINE entry named
+`convert-data` (a single object or a one-element list). It reads
+`03.spin/tasks.json` and requires every saved task to have normally completed.
+For atoms with nonzero initial INCAR moments, the filter compares the norms
+of the initial and final OUTCAR `magnetization (x/y/z)` moments using
+`sqrt(mean((|MAGMOM_initial| - |moment_final|)^2))`. Tasks above `5.0e-3`
+are recorded in `04.data/selection.json` and excluded. Malformed or incomplete
+tasks raise an error instead of being treated as rejected samples.
 
-For atoms with nonzero initial INCAR moments, the filter computes
-`sqrt(mean((|MAGMOM_initial| - |moment_final|)^2))`. Tasks above `5.0e-3` are
-listed in `04.data/deepmd/selection.json` and excluded; malformed or
-incomplete tasks raise an error. Accepted frames are grouped by composition
-and atom order. Each system directory retains ordinary DPData raw/npy files
-and aligned `spin.raw`, `spin_force.raw`, `spin_length.raw`, plus matching
-`set.000/*.npy` files. `spin` is the unit-vector direction (zero for exactly
-zero final moments); `spin_length` stores the original final magnitudes.
-`frames.json` maps each dataset row to its source task and OUTCAR frame.
-Stage 5 does not submit another VASP calculation or overwrite `03.spin`.
+Accepted OUTCAR/OSZICAR pairs are numbered within each scale as `OUTCAR-1` and
+`OSZICAR-1`, then sent to the `convert-data` command through DPDispatcher.
+This command reads `data/` and must generate `out/data.extxyz`; DPDispatcher
+retrieves that file. `out2npy` converts every extxyz frame in one pass and
+preserves `data.extxyz` alongside `type_map.raw`, `type.raw`, `box.raw`,
+`coord.raw`, `energy.raw`, `force.raw`, `force_mag.raw`, `spin.raw`, and
+`virial.raw`. The corresponding float64 arrays live in `out/set/`, with
+`energy.npy` one-dimensional. `spin = spin_length * initial_magmoms`,
+`force_mag = spin_forces_vert`, and `virial = -volume * stress` as provided by
+the extxyz data. The number of exported frames is determined by convert-data,
+not assumed to equal the accepted task count. Stage 5 does not run VASP again.

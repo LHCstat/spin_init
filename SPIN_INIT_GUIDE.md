@@ -1,6 +1,7 @@
 # `spin_init` 中文上手手册
 
-本文给出安装、配置、分阶段运行和排错步骤。字段与完整输入输出说明见
+最新版入门教程见 [README.md](README.md)。本文保留更详细的配置与排错说明；
+字段与完整输入输出说明见
 [doc/init/spin-init-usage.md](doc/init/spin-init-usage.md)。
 逐层输出目录与文件说明见 [SPIN_INIT_OUTPUT_STRUCTURE.md](SPIN_INIT_OUTPUT_STRUCTURE.md)。
 
@@ -12,6 +13,7 @@ POSCAR
   → 01.md：VASP AIMD
   → 02.disp：XDATCAR 的逐帧 POSCAR
   → 03.spin：每个快照的非共线磁性静态或结构/晶格优化 VASP task
+  → 04.data：磁矩 RMSE 筛选和 DeepMD 磁性数据导出
 ```
 
 这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、五种磁矩操作的独立
@@ -87,7 +89,7 @@ LCHARG = .FALSE.
 
 ```json
 {
-  "stages": [1, 2, 3, 4],
+  "stages": [1, 2, 3, 4, 5],
   "from_poscar_path": "./POSCAR",
   "out_dir": "./run_spin",
   "super_cell": [1, 1, 1],
@@ -165,13 +167,30 @@ Canting、Rota_Cant、Random 的 `seed` 是可选非负整数。每个随机操�
     "command": "srun vasp_std",
     "user_forward_files": ["/path/to/KPOINTS"],
     "user_backward_files": []
-  }
+  },
+  "convert-data": [{
+    "machine": {
+      "batch_type": "Slurm",
+      "context_type": "local",
+      "local_root": "./",
+      "remote_root": "/path/to/dpdispatcher/work"
+    },
+    "resources": {
+      "number_node": 1,
+      "cpu_per_node": 2,
+      "group_size": 1,
+      "queue_name": "partition"
+    },
+    "command": "nequip-data -m -z 8"
+  }]
 }
 ```
 
 旧式 `fp_machine`、`fp_resources`、`fp_command` 等扁平写法也兼容。若 AIMD 使用
 `vasp_std`、磁性计算使用 `vasp_ncl`，可在同一 JSON 中再加一个结构完全相同的 `spin`
 项，并把它的 command 写为 `srun vasp_ncl`。没有 `spin` 项时，stage 4 自动复用 `fp`。
+Stage 5 使用独立的 `convert-data` 项；它从每个 scale 的 `data/` 生成
+`out/data.extxyz`，再由 `out2npy` 写入 raw 和 `out/set/*.npy`。
 
 将 `vasp.slurm` 加入 `user_forward_files` 只会把它传入 task；command 写成
 `sbatch vasp.slurm` 则会调用 sbatch 提交该脚本。这不等于 DPDispatcher 会跟踪脚本中的
@@ -185,7 +204,7 @@ VASP：普通 sbatch 在子作业入队后就返回，DPDispatcher 可能提前�
 
 ```bash
 # stages=[1]
-dpgen spin_init spin-init.json
+dpgen spin_init spin-init.json machine.json
 
 # stages=[2]：不传 MACHINE 只建目录；传 MACHINE 会提交 AIMD
 dpgen spin_init spin-init.json machine.json
@@ -198,9 +217,12 @@ dpgen spin_init spin-init.json
 
 # stages=[4], spin_action="run"：提交已有 03.spin
 dpgen spin_init spin-init.json machine.json
+
+# stages=[5]：筛选已完成的磁性任务并导出 04.data
+dpgen spin_init spin-init.json machine.json
 ```
 
-也可使用 `stages=[1,2,3,4]` 与 `spin_action="make_run"` 一次执行。stage 4 单独运行时
+也可使用 `stages=[1,2,3,4,5]` 与 `spin_action="make_run"` 一次执行。stage 4 单独运行时
 不会读取 `md_incar`，但参数文件仍保留该字段以维持统一 schema。若 `make` 时没有提供
 MACHINE，`run` 会根据 MACHINE 安全补建缺少的 KPOINTS 等 user-forward 符号链接；若
 task 中已有同名但内容不同的文件则明确报错，不会覆盖。
@@ -221,17 +243,26 @@ run_spin/
 │   ├── 00/POSCAR
 │   ├── 01/POSCAR
 │   └── 02/POSCAR
-└── 03.spin/scale-1.000/000000/00/
-    ├── incar-000/
-    │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-    └── incar-001/
-        ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-        └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+├── 03.spin/scale-1.000/000000/00/
+│   ├── incar-000/
+│   │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   └── incar-001/
+│       ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+└── 04.data/
+    ├── selection.json
+    └── scale-1.000/
+        ├── data -> 03.spin/scale-1.000/data
+        └── out/
+            ├── data.extxyz
+            ├── {box,coord,energy,force,force_mag,spin,virial}.raw
+            ├── type.raw、type_map.raw
+            └── set/{box,coord,energy,force,force_mag,spin,virial}.npy
 ```
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
@@ -264,13 +295,16 @@ stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICA
 将 PARAM 中的 `stages` 改为 `[5]`，执行：
 
 ```bash
-dpgen spin_init spin-init.json
+dpgen spin_init spin-init.json machine.json
 ```
 
-也可在完整流程中使用 `stages=[1,2,3,4,5]`。Stage 5 不需要 MACHINE、
-不再次运行 VASP。它使用每个任务最后一个离子步，比较初始 INCAR 与最终 OUTCAR
-中非零初始磁矩原子的模长，RMSE 超过 `5.0e-3` 的任务会被排除并写明原因。
-合格数据位于 `out_dir/04.data/deepmd/<元素组成>/`，包含标准 DeepMD raw/npy、
-`spin.raw`、`spin_force.raw`、`spin_length.raw` 和对应的 `set.000/*.npy`。
-`selection.json` 记录筛选结果，`frames.json` 映射数据行和来源任务。
+也可在完整流程中使用 `stages=[1,2,3,4,5]`。Stage 5 不再次运行 VASP，
+但需要 MACHINE 中的 `convert-data` 配置提交 `nequip-data`。它比较初始 INCAR
+与最终 OUTCAR 中非零初始磁矩原子的模长，RMSE 超过 `5.0e-3` 的任务会被排除。
+每个 scale 的合格 OUTCAR/OSZICAR 按 `OUTCAR-1`/`OSZICAR-1` 编号收集，
+并在 `04.data/scale-*/data` 建立指向 `03.spin/scale-*/data` 的相对链接。
+`convert-data` 回传 `04.data/scale-*/out/data.extxyz`；同一个 `out/` 下保留
+`*.raw` 和 `set/*.npy`。`energy.npy` 为一维；`04.data/selection.json` 记录编号、来源任务及 RMSE。
+目前转换提交使用临时工作目录；若在提交后中断，重新执行不会自动恢复原远端任务。
+重跑前先确认原任务已结束，避免重复提交。
 更多字段与版本约定见 [使用说明](doc/init/spin-init-usage.md#stage-5磁矩筛选与-deepmd-数据导出)。

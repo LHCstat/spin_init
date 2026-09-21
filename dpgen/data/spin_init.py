@@ -402,6 +402,10 @@ def gen_spin_init(args):
         mdata = convert_mdata(mdata, ["fp"])
 
     output_root = Path(jdata["out_dir"]).resolve()
+    if 5 in stages:
+        data_stage = output_root / "04.data"
+        if data_stage.exists() or data_stage.is_symlink():
+            raise RuntimeError(f"output stage already exists: {data_stage}")
     output_root.mkdir(parents=True, exist_ok=True)
     parameter_source = Path(args.PARAM).resolve()
     parameter_copy = output_root / "param.json"
@@ -436,6 +440,6 @@ def gen_spin_init(args):
             if mdata is not None and jdata["spin_action"] != "make":
                 run_spin_tasks(jdata, spin_mdata)
         elif stage == 5:
-            from dpgen.data.spin_data import collect_spin_data
+            from dpgen.data.spin_stage5 import collect_spin_data
 
-            collect_spin_data(jdata)
+            collect_spin_data(jdata, mdata)
