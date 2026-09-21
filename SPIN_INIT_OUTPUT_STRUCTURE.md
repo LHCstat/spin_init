@@ -788,7 +788,9 @@ INCAR/OUTCAR 磁矩模长。RMSE 为 `sqrt(mean((|m_initial|-|m_final|)^2))`，
             └── force_mag.npy、spin.npy、virial.npy
 ```
 
-`convert-data` 在各 scale 的 `data/` 输入上运行，回传 `out/data.extxyz`；
+`convert-data` 在各 scale 的 `data/` 输入上运行。`nequip-data` 必须是 command 的
+最后一条简单命令，command 必须为不含 shell 注释的单行命令；程序自动
+创建远端 `out/` 并补齐缺少的 `-p data -o out/data.extxyz`，然后回传该文件；
 `out2npy` 一步产生同目录的 raw 与 `set/*.npy`。每个 raw 数值文件每帧一行；
 `energy.npy` 是形状为 `(帧数,)` 的一维数组。`spin` 由
 `spin_length × initial_magmoms` 得到，`force_mag` 对应

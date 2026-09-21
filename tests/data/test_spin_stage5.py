@@ -100,8 +100,71 @@ class TestSpinStage5(unittest.TestCase):
         self.assertEqual(kwargs["run_tasks"], ["scale-1.000", "scale-1.020"])
         self.assertEqual(kwargs["forward_files"], ["data"])
         self.assertEqual(kwargs["backward_files"], ["out/data.extxyz"])
-        self.assertEqual(kwargs["commands"], [mdata["convert-data"][0]["command"]])
+        self.assertEqual(
+            kwargs["commands"],
+            [
+                "mkdir -p out && source activate py39 && "
+                "nequip-data -m -z 8 -p data -o out/data.extxyz"
+            ],
+        )
         make_submission.return_value.run_submission.assert_called_once_with()
+
+    @mock.patch("dpgen.data.spin_stage5.make_submission")
+    def test_convert_data_does_not_duplicate_explicit_paths(self, make_submission):
+        """Catches duplicate options when a machine already follows the contract."""
+        with tempfile.TemporaryDirectory() as temporary:
+            command = (
+                "source activate py39 && nequip-data -m -z 8 "
+                "-p data -o out/data.extxyz"
+            )
+            spin_stage5.run_convert_data(
+                temporary,
+                ["scale-1.000"],
+                {
+                    "convert-data": [
+                        {
+                            "command": command,
+                            "machine": {"batch_type": "shell", "local_root": "./"},
+                            "resources": {"group_size": 1},
+                        }
+                    ]
+                },
+            )
+
+        actual = make_submission.call_args.kwargs["commands"][0]
+        self.assertEqual(
+            actual,
+            "mkdir -p out && " + command,
+        )
+        self.assertEqual(actual.count("-p data"), 1)
+        self.assertEqual(actual.count("-o out/data.extxyz"), 1)
+
+    @mock.patch("dpgen.data.spin_stage5.make_submission")
+    def test_convert_data_rejects_ambiguous_shell_commands(self, make_submission):
+        """Catches path flags being attached to a command other than nequip-data."""
+        machine = {
+            "convert-data": [
+                {
+                    "command": "unused",
+                    "machine": {"batch_type": "shell", "local_root": "./"},
+                    "resources": {"group_size": 1},
+                }
+            ]
+        }
+        for command in (
+            "echo nequip-data",
+            "nequip-data -m -z 8 && echo done",
+            "nequip-data -m -z 8 | tee conversion.log",
+            "nequip-data -m -z 8\necho done",
+            "nequip-data -m -z 8 # paths added too late",
+        ):
+            with self.subTest(command=command):
+                machine["convert-data"][0]["command"] = command
+                with self.assertRaisesRegex(ValueError, "nequip-data.*terminal"):
+                    spin_stage5.run_convert_data(
+                        "unused", ["scale-1.000"], machine
+                    )
+        make_submission.assert_not_called()
 
     def test_bohrium_convert_data_reports_missing_optional_oss_dependency(self):
         """Lebesgue upload must fail clearly before an opaque oss2 NameError."""

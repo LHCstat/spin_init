@@ -352,8 +352,11 @@ Stage 5 还需要一个独立的 `convert-data` 项，加入 MACHINE 顶层对�
 }
 ```
 
-按集群修改资源和命令；`convert-data` 也可写成单个对象。命令须读取每个 scale
-的 `data/` 并生成 `out/data.extxyz`，dpdispatcher 会回传该文件。
+按集群修改资源和命令；`convert-data` 也可写成单个对象。`command` 的最后一条
+简单命令必须是 `nequip-data`；前面可用 `source ... &&` 激活环境，但后面不能再接
+其他命令或管道。整个字段必须是无 shell 注释的单行命令。程序在远端创建 `out/`，并在命令未指定时自动追加
+`-p data -o out/data.extxyz`；若显式指定，两个路径必须完全一致。dpdispatcher
+随后回传 `out/data.extxyz`。
 
 `vasp.slurm` 放入 `user_forward_files` 只表示把文件传到 task 目录。command 明确
 写成 `sbatch vasp.slurm` 会调用 sbatch 提交该脚本，但普通 sbatch 入队后就返回，

@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import shutil
 import tempfile
 from pathlib import Path
@@ -13,6 +14,55 @@ from dpgen.data.spin_tasks import _saved_tasks, check_spin_results, read_spin_in
 from dpgen.dispatcher.Dispatcher import make_submission
 from dpgen.generator.lib.utils import check_api_version
 from dpgen.remote.decide_machine import convert_mdata
+
+
+def _convert_command(command):
+    """Make the remote converter consume data/ and create the declared output."""
+    if "\n" in command or "\r" in command or "#" in command:
+        raise ValueError(
+            "convert-data command must use nequip-data as its terminal simple "
+            "command without newlines or comments"
+        )
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError as error:
+        raise ValueError(f"invalid convert-data command: {error}") from error
+    operators = [
+        index
+        for index, token in enumerate(tokens)
+        if token and all(character in ";&|<>()" for character in token)
+    ]
+    terminal = tokens[(operators[-1] + 1 if operators else 0) :]
+    if not terminal or Path(terminal[0]).name != "nequip-data":
+        raise ValueError(
+            "convert-data command must use nequip-data as its terminal simple command"
+        )
+    arguments = terminal[1:]
+    required = (("-p", "data"), ("-o", "out/data.extxyz"))
+    missing = []
+    for option, expected in required:
+        positions = [
+            index for index, token in enumerate(arguments) if token == option
+        ]
+        if positions:
+            if len(positions) != 1 or positions[0] + 1 >= len(arguments):
+                raise ValueError(f"convert-data command has an invalid {option} option")
+            actual = arguments[positions[0] + 1]
+            if actual != expected:
+                raise ValueError(
+                    f"convert-data command requires {option} {expected}, got {actual!r}"
+                )
+        else:
+            missing.extend((option, expected))
+    suffix = (
+        ""
+        if not missing
+        else " " + " ".join(shlex.quote(value) for value in missing)
+    )
+    return f"mkdir -p out && {command.strip()}{suffix}"
 
 
 def select_spin_tasks(jdata):
@@ -121,7 +171,7 @@ def run_convert_data(work_path, scales, mdata):
     submission = make_submission(
         converted[prefix + "machine"],
         converted[prefix + "resources"],
-        commands=[converted[prefix + "command"]],
+        commands=[_convert_command(converted[prefix + "command"])],
         work_path=str(work_path),
         run_tasks=scales,
         group_size=converted[prefix + "group_size"],

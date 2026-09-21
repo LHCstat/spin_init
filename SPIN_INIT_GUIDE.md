@@ -190,7 +190,11 @@ Canting、Rota_Cant、Random 的 `seed` 是可选非负整数。每个随机操�
 `vasp_std`、磁性计算使用 `vasp_ncl`，可在同一 JSON 中再加一个结构完全相同的 `spin`
 项，并把它的 command 写为 `srun vasp_ncl`。没有 `spin` 项时，stage 4 自动复用 `fp`。
 Stage 5 使用独立的 `convert-data` 项；它从每个 scale 的 `data/` 生成
-`out/data.extxyz`，再由 `out2npy` 写入 raw 和 `out/set/*.npy`。
+`out/data.extxyz`，再由 `out2npy` 写入 raw 和 `out/set/*.npy`。`command`
+最后一条简单命令必须是 `nequip-data`；程序会创建远端 `out/`，并自动补齐缺少的
+`-p data -o out/data.extxyz`。若命令自行写出这两个参数，其值必须完全一致。
+可在前面使用 `source ... &&` 激活环境，但 `nequip-data` 后不要再接其他命令或管道。
+整个 `command` 必须写在一行内，且不能包含 shell 注释。
 
 将 `vasp.slurm` 加入 `user_forward_files` 只会把它传入 task；command 写成
 `sbatch vasp.slurm` 则会调用 sbatch 提交该脚本。这不等于 DPDispatcher 会跟踪脚本中的

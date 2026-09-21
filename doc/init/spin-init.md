@@ -202,7 +202,9 @@ as the input. Lattice and coordinates may change. The initial POSCAR symlink
 and its snapshot source are never replaced. A normal exit without VASP's
 structural convergence marker emits a warning, not a convergence claim;
 `check_spin_results` returns the normally terminated task count. This is not
-electronic/magnetic convergence or magnetic-quality validation.
+electronic/magnetic convergence or magnetic-quality validation. Every OUTCAR
+must also contain `ions per type` whose sum equals the input POSCAR atom count;
+an output from a different structure is rejected before RMSE filtering.
 
 Stage 5 can be run alone with `"stages": [5]` after `03.spin` finishes, or
 included in `"stages": [1, 2, 3, 4, 5]`. It requires a MACHINE entry named
@@ -216,8 +218,12 @@ tasks raise an error instead of being treated as rejected samples.
 
 Accepted OUTCAR/OSZICAR pairs are numbered within each scale as `OUTCAR-1` and
 `OSZICAR-1`, then sent to the `convert-data` command through DPDispatcher.
-This command reads `data/` and must generate `out/data.extxyz`; DPDispatcher
-retrieves that file. `out2npy` converts every extxyz frame in one pass and
+The command must be a single line without shell comments. Its terminal simple
+command must be `nequip-data`; environment setup may precede it with `&&`, but
+no command or pipeline may follow it. Stage 5 creates remote
+`out/` and appends `-p data -o out/data.extxyz` when those options are omitted.
+Explicit options must use those exact paths. DPDispatcher retrieves that file.
+`out2npy` converts every extxyz frame in one pass and
 preserves `data.extxyz` alongside `type_map.raw`, `type.raw`, `box.raw`,
 `coord.raw`, `energy.raw`, `force.raw`, `force_mag.raw`, `spin.raw`, and
 `virial.raw`. The corresponding float64 arrays live in `out/set/`, with

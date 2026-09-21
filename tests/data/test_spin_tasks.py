@@ -28,6 +28,10 @@ M_CONSTR = 0 0 2 3*0.0
 """
 
 
+def _outcar(text):
+    return "ions per type = 2\n" + text
+
+
 class TestSpinTasks(unittest.TestCase):
     def setUp(self):
         # tests.generator disables all logging at import during discovery.
@@ -540,7 +544,7 @@ class TestSpinTasks(unittest.TestCase):
         ]
         for task in paths:
             path = self.prepare_run_inputs(task)
-            (path / "OUTCAR").write_text("TOTAL-FORCE\nElapse\n")
+            (path / "OUTCAR").write_text(_outcar("TOTAL-FORCE\nElapse\n"))
             (path / "OSZICAR").write_text(" 1 F= -1 E0= -1\n")
         (self.root / "03.spin/tasks.json").write_text(json.dumps({"tasks": paths}))
         machine = {
@@ -622,12 +626,25 @@ class TestSpinTasks(unittest.TestCase):
             FileNotFoundError, "scale-1.000/000000/00/origin/000000"
         ):
             module.check_spin_results(self.jdata)
-        (path / "OUTCAR").write_text("TOTAL-FORCE\nElapse\n")
+        (path / "OUTCAR").write_text(_outcar("TOTAL-FORCE\nElapse\n"))
         (path / "OSZICAR").write_text("")
         with self.assertRaises(RuntimeError):
             module.check_spin_results(self.jdata)
         (path / "OSZICAR").write_text(" 1 F= -1 E0= -1\n")
         self.assertEqual(module.check_spin_results(self.jdata), 1)
+
+    def test_result_check_rejects_outcar_atom_count_different_from_poscar(self):
+        """Catches an OUTCAR from a different structure being accepted as this task."""
+        module = self.module()
+        path = self.prepare_run_inputs()
+        (path / "OUTCAR").write_text("ions per type = 32\nTOTAL-FORCE\nElapse\n")
+        (path / "OSZICAR").write_text(" 1 F= -1 E0= -1\n")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"scale-1\.000/000000/00/origin/000000.*OUTCAR.*32.*POSCAR.*2",
+        ):
+            module.check_spin_results(self.jdata)
 
     def prepare_relax_results(self, converged=True):
         path = self.prepare_run_inputs()
@@ -640,7 +657,9 @@ class TestSpinTasks(unittest.TestCase):
             if converged
             else ""
         )
-        (path / "OUTCAR").write_text("TOTAL-FORCE\nTOTAL-FORCE\n" + marker + "Elapse\n")
+        (path / "OUTCAR").write_text(
+            _outcar("TOTAL-FORCE\nTOTAL-FORCE\n" + marker + "Elapse\n")
+        )
         (path / "OSZICAR").write_text(" 1 F= -1\n 2 F= -2\n")
         (path / "CONTCAR").write_text(POSCAR_TEXT.replace("2.0", "2.1"))
         return path
@@ -691,7 +710,7 @@ class TestSpinTasks(unittest.TestCase):
         path = self.prepare_relax_results()
         for text in ("TOTAL-FORCE\n", "Elapse\n", "TOTAL-FORCE\nElapse\nElapse\n"):
             with self.subTest(text=text):
-                (path / "OUTCAR").write_text(text)
+                (path / "OUTCAR").write_text(_outcar(text))
                 with self.assertRaisesRegex(RuntimeError, "OUTCAR"):
                     self.module().check_spin_results(self.jdata)
 

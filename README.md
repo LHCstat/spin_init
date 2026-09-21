@@ -203,7 +203,7 @@ M_CONSTR = 0 0 2  0 0 0
 }
 ```
 
-未配置 `spin` 时 Stage 4 复用 `fp`。旧式扁平 `fp_*` 配置也兼容。Stage 5 的 `convert-data` 可写成示例中的单项列表，也可直接写成对象；其命令必须从每个 scale 的 `data/` 生成 `out/data.extxyz`。示例分区、资源和路径均需按集群修改。将 `vasp.slurm` 放入 `user_forward_files` 仅表示把文件带入任务目录；只有把命令写成 `sbatch vasp.slurm` 才会实际提交该脚本。普通 `sbatch` 入队后立即返回，可能导致 DPDispatcher 过早回传，推荐由 DPDispatcher 管理 Slurm 作业并在其中直接执行 `srun vasp_std` 或 `srun vasp_ncl`。
+未配置 `spin` 时 Stage 4 复用 `fp`。旧式扁平 `fp_*` 配置也兼容。Stage 5 的 `convert-data` 可写成示例中的单项列表，也可直接写成对象；`command` 必须为不含注释的单行命令，最后一条简单命令必须是 `nequip-data`（前面可以写 `source ... &&`，后面不要再接管道或其他命令）。程序自动在远端创建 `out/`，并在命令未指定时追加 `-p data -o out/data.extxyz`；若用户显式给出这两个参数，其值必须与这里一致。示例分区、资源和路径均需按集群修改。将 `vasp.slurm` 放入 `user_forward_files` 仅表示把文件带入任务目录；只有把命令写成 `sbatch vasp.slurm` 才会实际提交该脚本。普通 `sbatch` 入队后立即返回，可能导致 DPDispatcher 过早回传，推荐由 DPDispatcher 管理 Slurm 作业并在其中直接执行 `srun vasp_std` 或 `srun vasp_ncl`。
 
 ## 5. 运行与分阶段检查
 

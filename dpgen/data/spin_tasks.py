@@ -28,6 +28,7 @@ _CONFIGURATION_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]*"
 _OPERATION_GROUP = r"(?:Rotation|Canting|Rota_Cant|Random|Scale)-\d{3,}"
 # Ungrouped names remain valid for saved tasks from earlier versions.
 _CONFIGURATION_PATH = rf"(?:{_OPERATION_GROUP}/)?{_CONFIGURATION_NAME}"
+_IONS_PER_TYPE = re.compile(r"^\s*ions per type\s*=\s*(\d+(?:\s+\d+)*)\s*$", re.M)
 
 
 def _vectors(values, natoms, context):
@@ -457,6 +458,25 @@ def check_spin_results(jdata):
         text = outcar.read_text(errors="replace")
         if not text:
             raise RuntimeError(f"empty OUTCAR for spin task {task}: {outcar}")
+        ion_counts = _IONS_PER_TYPE.findall(text)
+        if not ion_counts:
+            raise ValueError(
+                f"spin task {task}: OUTCAR has no ions per type record: {outcar}"
+            )
+        outcar_natoms = {
+            sum(int(value) for value in counts.split()) for counts in ion_counts
+        }
+        if len(outcar_natoms) != 1:
+            raise ValueError(
+                f"spin task {task}: OUTCAR has inconsistent ions per type records: "
+                f"{outcar}"
+            )
+        outcar_natoms = outcar_natoms.pop()
+        if outcar_natoms != len(initial):
+            raise ValueError(
+                f"spin task {task}: OUTCAR {outcar} has {outcar_natoms} atoms, "
+                f"but POSCAR {poscar} has {len(initial)} atoms"
+            )
         force_blocks = text.count("TOTAL-FORCE")
         if (
             text.count("Elapse") != 1
