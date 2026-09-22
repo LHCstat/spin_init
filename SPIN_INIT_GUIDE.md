@@ -110,8 +110,8 @@ LCHARG = .FALSE.
 }
 ```
 
-`spin_incar` 也可以继续写成单个字符串，此时不增加 `incar-###` 索引层。写成列表时，
-列表必须非空、路径不能重复，并按输入顺序增加 `incar-000`、`incar-001`……目录。每个
+`spin_incar` 也可以继续写成单个字符串，此时不增加 `###-incar` 索引层。写成列表时，
+列表必须非空、路径不能重复，并按输入顺序增加 `000-incar`、`001-incar`……目录。每个
 模板都使用自己的初始 `MAGMOM/M_CONSTR`，然后执行同一套 `pert_spin` 操作。随机操作
 共用每个随机操作各自的连续 RNG 序列，遍历顺序为 snapshot → INCAR 输入顺序 →
 扰动字段输入顺序 → 局部变体，因此
@@ -121,9 +121,9 @@ LCHARG = .FALSE.
 每个字段从模板的初始磁矩出发，不使用其他字段的结果；只有同一字段内部的参数列表
 保留笛卡尔组合。上例产生 `1 + 2 + 2 = 5` 个独立扰动构型，另有共享基准 `origin/000000`。
 
-输出按模式和从零开始的字段输入序号分组：`Rotation-000/R1`、`Canting-001/C1`、
-`Canting-001/C2`、`Scale-002/S1`、`Scale-002/S2`。如果再次输入 Rotation，例如位于
-列表第 4 项，则创建独立的 `Rotation-003`。分开写 Rotation 和 Canting 不再串联；
+输出按模式和从零开始的字段输入序号分组：`000-rotation/R1`、`001-canting/C1`、
+`001-canting/C2`、`002-scale/S1`、`002-scale/S2`。如果再次输入 Rotation，例如位于
+列表第 4 项，则创建独立的 `003-rotation`。分开写 Rotation 和 Canting 不再串联；
 需要先旋转再 canting 时使用 `Rota_Cant`。
 
 五种模式如下：
@@ -248,16 +248,16 @@ run_spin/
 │   ├── 01/POSCAR
 │   └── 02/POSCAR
 ├── 03.spin/scale-1.000/000000/00/
-│   ├── incar-000/
+│   ├── 000-incar/
 │   │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│   │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│   │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│   │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│   └── incar-001/
+│   │   ├── 000-rotation/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   │   ├── 001-canting/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   │   └── 002-scale/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│   └── 001-incar/
 │       ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       ├── 000-rotation/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       ├── 001-canting/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       └── 002-scale/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 └── 04.data/
     ├── selection.json
     └── scale-1.000/
@@ -271,10 +271,11 @@ run_spin/
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
 是普通独立文件，每个局部变体目录写入对应的 MAGMOM/M_CONSTR。若 `spin_incar` 是单个
-字符串，则不会出现 `incar-###` 层；磁扰动的模式分组层仍按新规则生成。
+字符串，则不会出现 `###-incar` 层；磁扰动的模式分组层仍按新规则生成。
 
-旧版直接位于 `000000/` 的基准任务和未分组扰动任务仍可使用 `spin_action="run"`
-按清单提交；程序不会迁移或重新扰动已有 `03.spin`。要生成含 `origin/000000/` 的
+旧版的 `incar-000` 索引层、`Rotation-000` 等模式分组、直接位于 `000000/` 的基准
+任务和未分组扰动任务，仍可使用 `spin_action="run"` 按清单提交；程序不会迁移或重新
+扰动已有 `03.spin`。要生成含 `origin/000000/` 的
 新布局，请使用新的 `out_dir`；若只运行 Stage 4，
 需要先在该输出根目录下准备好对应的 `02.disp` 快照。
 

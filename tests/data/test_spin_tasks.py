@@ -146,16 +146,16 @@ class TestSpinTasks(unittest.TestCase):
         self.jdata["spin_pert_numb"] = 1
 
         def provider(moments, count):
-            return {"R1": [[2, 0, 0], [0, 0, 0]]}
+            return {"000-rotation/R1": [[2, 0, 0], [0, 0, 0]]}
 
         tasks = module.plan_spin_tasks(self.jdata, {}, perturb=provider)
         self.assertEqual(
             [t["task"] for t in tasks],
             [
                 "scale-1.000/000000/00/origin/000000",
-                "scale-1.000/000000/00/R1",
+                "scale-1.000/000000/00/000-rotation/R1",
                 "scale-1.000/000000/01/origin/000000",
-                "scale-1.000/000000/01/R1",
+                "scale-1.000/000000/01/000-rotation/R1",
             ],
         )
         self.assertFalse((self.root / "03.spin").exists())
@@ -172,10 +172,10 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [task["task"] for task in tasks],
             [
-                "scale-1.000/000000/00/incar-000/origin/000000",
-                "scale-1.000/000000/00/incar-001/origin/000000",
-                "scale-1.000/000000/01/incar-000/origin/000000",
-                "scale-1.000/000000/01/incar-001/origin/000000",
+                "scale-1.000/000000/00/000-incar/origin/000000",
+                "scale-1.000/000000/00/001-incar/origin/000000",
+                "scale-1.000/000000/01/000-incar/origin/000000",
+                "scale-1.000/000000/01/001-incar/origin/000000",
             ],
         )
         np.testing.assert_array_equal(tasks[0]["moments"], [[0, 0, 2], [0, 0, 0]])
@@ -231,7 +231,7 @@ class TestSpinTasks(unittest.TestCase):
         self.jdata["spin_incar"] = [str(self.incar), str(bad_incar)]
 
         with self.assertRaisesRegex(
-            ValueError, r"scale-1\.000/000000/00.*incar-001.*INCAR_bad"
+            ValueError, r"scale-1\.000/000000/00.*001-incar.*INCAR_bad"
         ):
             module.plan_spin_tasks(self.jdata, {})
         self.assertFalse((self.root / "03.spin").exists())
@@ -243,7 +243,7 @@ class TestSpinTasks(unittest.TestCase):
 
         with self.assertRaisesRegex(
             FileNotFoundError,
-            r"scale-1\.000/000000/00.*incar-001.*INCAR_missing",
+            r"scale-1\.000/000000/00.*001-incar.*INCAR_missing",
         ):
             module.plan_spin_tasks(self.jdata, {})
         self.assertFalse((self.root / "03.spin").exists())
@@ -266,13 +266,13 @@ class TestSpinTasks(unittest.TestCase):
             [task["task"] for task in tasks],
             [
                 "scale-1.000/000000/00/origin/000000",
-                "scale-1.000/000000/00/Rotation-000/R1",
-                "scale-1.000/000000/00/Scale-001/S1",
-                "scale-1.000/000000/00/Scale-001/S2",
+                "scale-1.000/000000/00/000-rotation/R1",
+                "scale-1.000/000000/00/001-scale/S1",
+                "scale-1.000/000000/00/001-scale/S2",
                 "scale-1.000/000000/01/origin/000000",
-                "scale-1.000/000000/01/Rotation-000/R1",
-                "scale-1.000/000000/01/Scale-001/S1",
-                "scale-1.000/000000/01/Scale-001/S2",
+                "scale-1.000/000000/01/000-rotation/R1",
+                "scale-1.000/000000/01/001-scale/S1",
+                "scale-1.000/000000/01/001-scale/S2",
             ],
         )
         np.testing.assert_array_equal(tasks[0]["moments"], [[0, 0, 2], [0, 0, 0]])
@@ -303,14 +303,14 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(
             [task["task"] for task in tasks[:8]],
             [
-                "scale-1.000/000000/00/incar-000/origin/000000",
-                "scale-1.000/000000/00/incar-000/Rotation-000/R1",
-                "scale-1.000/000000/00/incar-000/Scale-001/S1",
-                "scale-1.000/000000/00/incar-000/Scale-001/S2",
-                "scale-1.000/000000/00/incar-001/origin/000000",
-                "scale-1.000/000000/00/incar-001/Rotation-000/R1",
-                "scale-1.000/000000/00/incar-001/Scale-001/S1",
-                "scale-1.000/000000/00/incar-001/Scale-001/S2",
+                "scale-1.000/000000/00/000-incar/origin/000000",
+                "scale-1.000/000000/00/000-incar/000-rotation/R1",
+                "scale-1.000/000000/00/000-incar/001-scale/S1",
+                "scale-1.000/000000/00/000-incar/001-scale/S2",
+                "scale-1.000/000000/00/001-incar/origin/000000",
+                "scale-1.000/000000/00/001-incar/000-rotation/R1",
+                "scale-1.000/000000/00/001-incar/001-scale/S1",
+                "scale-1.000/000000/00/001-incar/001-scale/S2",
             ],
         )
         np.testing.assert_allclose(tasks[2]["moments"], [[0, 0, 1.8], [0, 0, 0]])
@@ -339,19 +339,19 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(len(paths), 16)
         self.assertEqual(json.loads((stage / "tasks.json").read_text())["tasks"], paths)
         self.assertEqual(module._saved_tasks(self.jdata)[1], paths)
-        parent = stage / "scale-1.000/000000/00/incar-000"
+        parent = stage / "scale-1.000/000000/00/000-incar"
         for relative, expected in (
             ("origin/000000", [[0, 0, 2], [0, 0, 0]]),
-            ("Rotation-000/R1", [[2, 0, 0], [0, 0, 0]]),
-            ("Scale-001/S1", [[0, 0, 1.8], [0, 0, 0]]),
-            ("Scale-001/S2", [[0, 0, 2.2], [0, 0, 0]]),
+            ("000-rotation/R1", [[2, 0, 0], [0, 0, 0]]),
+            ("001-scale/S1", [[0, 0, 1.8], [0, 0, 0]]),
+            ("001-scale/S2", [[0, 0, 2.2], [0, 0, 0]]),
         ):
             incar, moments = module.read_spin_incar(parent / relative / "INCAR", 2)
             np.testing.assert_allclose(moments, expected, atol=1e-14)
             self.assertEqual(incar["ENCUT"], 400)
         self.assertEqual(self.incar.read_text(), TEMPLATE)
         for frame in ("00", "01"):
-            for label in ("incar-000", "incar-001"):
+            for label in ("000-incar", "001-incar"):
                 parent = stage / "scale-1.000/000000" / frame / label
                 self.assertTrue((parent / "origin/000000/INCAR").is_file())
                 self.assertFalse((parent / "000000").exists())
@@ -410,10 +410,12 @@ class TestSpinTasks(unittest.TestCase):
             "000000",
             "origin",
             "origin/000000",
+            "R1",
             "R/1",
-            "Rotation-000/../outside",
+            "Rotation-000/R1",
+            "000-rotation/../outside",
             "Unknown-000/R1",
-            "Rotation-000/R1/extra",
+            "000-rotation/R1/extra",
         ):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 module.plan_spin_tasks(self.jdata, {}, perturb=lambda m, n: {name: m})
@@ -476,9 +478,9 @@ class TestSpinTasks(unittest.TestCase):
 
         paths = module.make_spin_tasks(self.jdata, {}, perturb=provider)
 
-        self.assertIn("scale-1.000/000000/00/incar-000/origin/000000", paths)
-        self.assertIn("scale-1.000/000000/00/incar-001/origin/000000", paths)
-        self.assertIn("scale-1.000/000000/00/incar-001/Rotation-000/R1", paths)
+        self.assertIn("scale-1.000/000000/00/000-incar/origin/000000", paths)
+        self.assertIn("scale-1.000/000000/00/001-incar/origin/000000", paths)
+        self.assertIn("scale-1.000/000000/00/001-incar/000-rotation/R1", paths)
         self.assertEqual(len(paths), 16)
         saved = json.loads((self.root / "03.spin/tasks.json").read_text())
         self.assertEqual(saved["tasks"], paths)
@@ -491,9 +493,9 @@ class TestSpinTasks(unittest.TestCase):
             self.assertFalse(Path((path / "POSCAR").readlink()).is_absolute())
             self.assertFalse(Path((path / "POTCAR").readlink()).is_absolute())
             _, moments = module.read_spin_incar(path / "INCAR", 2)
-            if task.endswith("incar-000/Rotation-000/R1"):
+            if task.endswith("000-incar/000-rotation/R1"):
                 np.testing.assert_allclose(moments, [[2, 0, 0], [0, 0, 0]], atol=1e-14)
-            if task.endswith("incar-000/Scale-001/S1"):
+            if task.endswith("000-incar/001-scale/S1"):
                 np.testing.assert_allclose(moments, [[0, 0, 1.8], [0, 0, 0]])
 
     def test_run_materializes_forward_files_missing_from_existing_tasks(self):
@@ -531,7 +533,7 @@ class TestSpinTasks(unittest.TestCase):
         (stage / "tasks.json").write_text(json.dumps({"tasks": [task]}))
         return path
 
-    def test_grouped_and_multi_incar_tasks_are_submitted_from_manifest(self):
+    def test_legacy_grouped_and_multi_incar_tasks_are_submitted_from_manifest(self):
         module = self.module()
         paths = [
             "scale-1.000/000000/00/Rotation-000/R1",
@@ -576,13 +578,13 @@ class TestSpinTasks(unittest.TestCase):
         stage = self.root / "03.spin"
         stage.mkdir()
         for task in (
-            "scale-1.000/000000/00/incar-000/Rotation-000/../outside",
+            "scale-1.000/000000/00/000-incar/000-rotation/../outside",
             "scale-1.000/000000/00/Unknown-000/R1",
-            "scale-1.000/000000/00/Rotation-000/R1/extra",
+            "scale-1.000/000000/00/000-rotation/R1/extra",
             "scale-1.000/000000/00/origin/R1",
             "scale-1.000/000000/00/origin/000001",
             "scale-1.000/000000/00/origin/000000/extra",
-            "scale-1.000/000000/00/incar-000/origin/../outside",
+            "scale-1.000/000000/00/000-incar/origin/../outside",
         ):
             (stage / "tasks.json").write_text(json.dumps({"tasks": [task]}))
             with (
@@ -841,7 +843,7 @@ class TestSpinTasks(unittest.TestCase):
         self.assertEqual(generated_jdata["spin_pert_numb"], 4)
         self.assertEqual(
             list(provider(np.array([[1.0, 0, 0]]), 4)),
-            ["Rotation-000/R1", "Rotation-000/R2", "Scale-001/S1", "Scale-001/S2"],
+            ["000-rotation/R1", "000-rotation/R2", "001-scale/S1", "001-scale/S2"],
         )
 
     def test_invalid_spin_parameters_fail_before_an_earlier_stage_runs(self):

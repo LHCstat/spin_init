@@ -174,7 +174,7 @@ stage-4 新字段：
 `spin_action=make` 只生成 `03.spin`；`run` 只提交已存在的 `03.spin`，并要求提供
 MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE 时只生成。
 
-单个初始 INCAR 沿用字符串写法，不增加 `incar-###` 索引层：
+单个初始 INCAR 沿用字符串写法，不增加 `###-incar` 索引层：
 
 ```json
 "spin_incar": "./INCAR.spin"
@@ -190,23 +190,23 @@ MACHINE；`make_run` 在提供 MACHINE 时生成后提交，未提供 MACHINE �
 ```
 
 列表必须非空，每项必须是非空字符串，解析后的文件路径不能重复。列表输入会在
-snapshot 与磁构型之间增加 `incar-000`、`incar-001`……层；即使列表中只有一个文件也
-会增加 `incar-000`。每个文件提供自己的初始 `MAGMOM/M_CONSTR`，随后应用相同的
+snapshot 与磁构型之间增加 `000-incar`、`001-incar`……层；即使列表中只有一个文件也
+会增加 `000-incar`。每个文件提供自己的初始 `MAGMOM/M_CONSTR`，随后应用相同的
 `pert_spin`。遍历顺序固定为 snapshot → INCAR 输入顺序 → 扰动字段输入顺序 → 局部变体。
 所有 INCAR 共用每个随机操作各自的连续 RNG 序列，不会分别重新 seed，所以随机结果
 不同但整体可以复现。
 
 每个快照的每个 INCAR 模板保留一个输入磁矩不变的基准构型，放在 `origin/000000/`。
-`origin` 是新增的分类层，与 `Rotation-000` 等模式分组并列；列表形式的多个 INCAR
-分别使用 `incar-###/origin/000000/`。上游结构扰动编号和 AIMD 快照编号不变。
+`origin` 是新增的分类层，与 `000-rotation` 等模式分组并列；列表形式的多个 INCAR
+分别使用 `###-incar/origin/000000/`。上游结构扰动编号和 AIMD 快照编号不变。
 `pert_spin` 每项必须且只能包含一个
 模式，允许重复模式。不同字段独立作用于模板中的初始磁矩，不会使用前一个字段的
 结果；只有同一字段内部的参数列表保留笛卡尔组合。因此不同字段的构型数量相加，
 不再相乘。
 
-输出组名为 `<模式>-<从零开始的字段输入序号>`，例如 `Rotation-000`、`Canting-001`、
-`Scale-002`。组内局部名称分别为 `R#`、`C#`、`RC#`、`Rand#`、`S#`，例如
-`Rotation-000/R1/INCAR`。重复输入同一模式时仍是独立组，不会重名或累积作用。
+输出组名为 `<从零开始的字段输入序号>-<小写模式>`，例如 `000-rotation`、`001-canting`、
+`002-scale`。组内局部名称分别为 `R#`、`C#`、`RC#`、`Rand#`、`S#`，例如
+`000-rotation/R1/INCAR`。重复输入同一模式时仍是独立组，不会重名或累积作用。
 若需要明确的先旋转再 canting，请使用 `Rota_Cant`，而不是分开写 Rotation 和 Canting。
 
 ### Canting 参数和数学定义
@@ -276,10 +276,10 @@ INCAR 模板或 snapshot 重新设 seed，而是按稳定顺序连续推进。�
 
 ```text
 03.spin/.../origin/000000/INCAR
-03.spin/.../Rotation-000/R1/INCAR
-03.spin/.../Rotation-000/R4/INCAR
-03.spin/.../Canting-001/C2/INCAR
-03.spin/.../Scale-002/S10/INCAR
+03.spin/.../000-rotation/R1/INCAR
+03.spin/.../000-rotation/R4/INCAR
+03.spin/.../001-canting/C2/INCAR
+03.spin/.../002-scale/S10/INCAR
 ```
 
 ## machine.json 编写方式
@@ -397,16 +397,16 @@ out_dir/
 │   ├── POTCAR
 │   ├── tasks.json
 │   └── scale-1.000/000000/00/
-│       ├── incar-000/
+│       ├── 000-incar/
 │       │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       └── incar-001/
+│       │   ├── 000-rotation/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   ├── 001-canting/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   └── 002-scale/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       └── 001-incar/
 │           ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│           ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│           ├── Canting-001/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│           └── Scale-002/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│           ├── 000-rotation/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│           ├── 001-canting/C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│           └── 002-scale/S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 └── 04.data/
     ├── selection.json
     └── scale-1.000/
@@ -422,9 +422,10 @@ stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICA
 任务的提交还自动回传 CONTCAR。用户配置的
 backward files 会在此基础上追加。`03.spin` 中 POSCAR/POTCAR 必须是真实相对符号链接，
 INCAR 则是每个磁构型自己的普通文件。上图展示列表写法；字符串写法不含
-`incar-###` 层，但同样具有 `origin/000000/` 基准目录和磁扰动模式分组层。
+`###-incar` 层，但同样具有 `origin/000000/` 基准目录和磁扰动模式分组层。
 
-旧版清单中直接位于 `000000/` 的基准任务仍可用 `spin_action="run"` 提交。
+旧版清单中的 `incar-000` 索引层、`Rotation-000` 等模式分组，以及直接位于
+`000000/` 的基准任务，仍可用 `spin_action="run"` 提交。
 程序不会自动搬移旧任务或改写旧清单；新布局需要在新的输出目录中生成。
 
 ## 分阶段运行
@@ -444,8 +445,9 @@ dpgen spin_init spin-init.json machine.json
 时没有 MACHINE，`run` 会按 MACHINE 补建缺少的 user-forward 符号链接；已有同名文件
 与配置来源不一致时会报错而不是覆盖。
 
-`run` 仍兼容旧版本保存的未分组磁构型路径（包括串联组合名称），不会迁移或重新
-扰动已有 `03.spin`。若要按新规则生成任务，请使用新的 `out_dir`；只运行 Stage 4 时，
+`run` 仍兼容旧版本保存的 `incar-000` 索引层、`Rotation-000` 等模式分组和未分组
+磁构型路径（包括串联组合名称），不会迁移或重新扰动已有 `03.spin`。若要按新规则
+生成任务，请使用新的 `out_dir`；只运行 Stage 4 时，
 该根目录下必须先准备好对应的 `02.disp` 快照。
 
 ## Stage 5：磁矩筛选与 DeepMD 数据导出

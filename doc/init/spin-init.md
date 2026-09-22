@@ -58,7 +58,7 @@ initial magnetic states with the same perturbation groups, use:
 ```
 
 A list must be nonempty and must not repeat a resolved path. List entries add
-an `incar-000`, `incar-001`, ... directory between the snapshot and magnetic
+an `000-incar`, `001-incar`, ... directory between the snapshot and magnetic
 configuration. A string omits this INCAR index layer. Processing order
 is snapshot, then INCAR list order, then operation group and local variant. All templates
 share each stochastic operation's continuous random-number sequence, so their stochastic
@@ -78,10 +78,10 @@ products apply only to parameter lists inside one block. The example creates
 `1 Rotation + 2 Canting + 2 Scale = 5` perturbed configurations, plus one
 unchanged `origin/000000` baseline per snapshot/template.
 
-Groups are named by mode and zero-based input index: `Rotation-000`,
-`Canting-001`, `Scale-002`. Their local variants are placed in separate task
-subdirectories, for example `Rotation-000/R1` or `Canting-001/C2`.
-A repeated Rotation at list index 3 gets its own `Rotation-003` group.
+Groups are named by zero-based input index followed by the lowercase mode: `000-rotation`,
+`001-canting`, `002-scale`. Their local variants are placed in separate task
+subdirectories, for example `000-rotation/R1` or `001-canting/C2`.
+A repeated Rotation at list index 3 gets its own `003-rotation` group.
 Separate Rotation and Canting blocks no longer compose; use `Rota_Cant` when
 that explicit combination is required.
 
@@ -124,9 +124,9 @@ workflow accepts one initial POSCAR.
 01.md/scale-1.000/000000/{POSCAR,INCAR,POTCAR,OUTCAR,XDATCAR}
 02.disp/scale-1.000/000000/00/POSCAR
 03.spin/scale-1.000/000000/00/origin/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
-03.spin/scale-1.000/000000/00/Rotation-000/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
-03.spin/scale-1.000/000000/00/Canting-001/C1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
-03.spin/scale-1.000/000000/00/Scale-002/S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/000-rotation/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/001-canting/C1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/002-scale/S1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 03.spin/scale-1.000/data/{OUTCAR-1,OSZICAR-1,...}
 04.data/selection.json
 04.data/scale-1.000/data -> 03.spin/scale-1.000/data
@@ -136,8 +136,8 @@ workflow accepts one initial POSCAR.
 With a `spin_incar` list, the stage-4 paths instead become, for example:
 
 ```text
-03.spin/scale-1.000/000000/00/incar-000/origin/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
-03.spin/scale-1.000/000000/00/incar-001/Rotation-000/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/000-incar/origin/000000/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
+03.spin/scale-1.000/000000/00/001-incar/000-rotation/R1/{POSCAR,INCAR,POTCAR,OUTCAR,OSZICAR}
 ```
 
 Task-level POSCAR and POTCAR files in `01.md` and `03.spin` are real relative
@@ -145,7 +145,8 @@ symbolic links. Each stage-4 INCAR is a private regular file so a later magnetic
 perturbation can change it independently.
 
 Run-only still accepts saved task paths from earlier versions, including
-baselines directly under `000000` and ungrouped composed names. Existing
+`incar-000` layers, `Rotation-000`-style groups, baselines directly under
+`000000`, and ungrouped composed names. Existing
 `03.spin` trees are not migrated or re-perturbed; use a new output root to
 generate the independent-group layout with the `origin/000000` baseline.
 For stage-4-only generation, that root must already contain the required

@@ -25,7 +25,11 @@ from dpgen.generator.lib.utils import check_api_version
 SPIN_DIR = "03.spin"
 _BASELINE_PATH = "origin/000000"
 _CONFIGURATION_NAME = r"[A-Za-z0-9][A-Za-z0-9_-]*"
-_OPERATION_GROUP = r"(?:Rotation|Canting|Rota_Cant|Random|Scale)-\d{3,}"
+_NEW_OPERATION_GROUP = r"\d{3,}-(?:rotation|canting|rota_cant|random|scale)"
+_LEGACY_OPERATION_GROUP = r"(?:Rotation|Canting|Rota_Cant|Random|Scale)-\d{3,}"
+_OPERATION_GROUP = rf"(?:{_NEW_OPERATION_GROUP}|{_LEGACY_OPERATION_GROUP})"
+_INCAR_GROUP = r"(?:\d{3,}-incar|incar-\d{3,})"
+_GENERATED_CONFIGURATION_PATH = rf"{_NEW_OPERATION_GROUP}/{_CONFIGURATION_NAME}"
 # Ungrouped names remain valid for saved tasks from earlier versions.
 _CONFIGURATION_PATH = rf"(?:{_OPERATION_GROUP}/)?{_CONFIGURATION_NAME}"
 _IONS_PER_TYPE = re.compile(r"^\s*ions per type\s*=\s*(\d+(?:\s+\d+)*)\s*$", re.M)
@@ -218,7 +222,7 @@ def _spin_incar_sources(value):
         if normalized in resolved:
             raise ValueError(f"spin_incar[{index}] duplicates an earlier path: {path}")
         resolved.add(normalized)
-        sources.append((f"incar-{index:03d}", path))
+        sources.append((f"{index:03d}-incar", path))
     return sources
 
 
@@ -280,7 +284,7 @@ def plan_spin_tasks(jdata, mdata, perturb=None):
                 for name, values in extra.items():
                     if (
                         not isinstance(name, str)
-                        or not re.fullmatch(_CONFIGURATION_PATH, name)
+                        or not re.fullmatch(_GENERATED_CONFIGURATION_PATH, name)
                         or name in {"000000", "origin"}
                     ):
                         raise ValueError(
@@ -346,7 +350,7 @@ def _saved_tasks(jdata):
     for task in paths:
         if not isinstance(task, str) or not re.fullmatch(
             rf"scale-[0-9]+(?:\.[0-9]+)?/\d{{6}}/\d{{2,}}/"
-            rf"(?:incar-\d{{3,}}/)?(?:{_BASELINE_PATH}|{_CONFIGURATION_PATH})",
+            rf"(?:{_INCAR_GROUP}/)?(?:{_BASELINE_PATH}|{_CONFIGURATION_PATH})",
             task,
         ):
             raise ValueError(f"{manifest}: invalid task path {task!r}")

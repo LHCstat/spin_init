@@ -21,7 +21,7 @@ class TestSpinStage5(unittest.TestCase):
     def _make_tasks(self, root):
         paths = [
             "scale-1.000/000000/00/origin/000000",
-            "scale-1.000/000000/00/Rotation-000/R1",
+            "scale-1.000/000000/00/000-rotation/R1",
             "scale-1.020/000000/00/origin/000000",
         ]
         stage = root / "03.spin"

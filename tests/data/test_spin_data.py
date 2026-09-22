@@ -141,8 +141,8 @@ class TestSpinDataCollector(unittest.TestCase):
             root = Path(temporary)
             tasks = [
                 "scale-1.000/000000/00/origin/000000",
-                "scale-1.000/000000/00/Rotation-000/R1",
-                "scale-1.000/000000/00/Canting-001/C1",
+                "scale-1.000/000000/00/000-rotation/R1",
+                "scale-1.000/000000/00/001-canting/C1",
             ]
             stage = root / "03.spin"
             stage.mkdir()

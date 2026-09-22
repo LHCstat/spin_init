@@ -391,7 +391,8 @@ def _compile_operations(pert_spin):
             raise NotImplementedError(
                 f"{block_location}: spin perturbation mode {mode!r} is not implemented"
             ) from error
-        operations.append((f"{mode}-{block_index:03d}", compiler(parameters, location)))
+        group = f"{block_index:03d}-{mode.lower()}"
+        operations.append((group, compiler(parameters, location)))
     return operations
 
 

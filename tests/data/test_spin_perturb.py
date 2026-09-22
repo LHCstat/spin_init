@@ -72,17 +72,17 @@ class TestRotation(unittest.TestCase):
         self.assertEqual(
             list(configurations),
             [
-                "Rotation-000/R1",
-                "Rotation-000/R2",
-                "Rotation-000/R3",
-                "Rotation-000/R4",
+                "000-rotation/R1",
+                "000-rotation/R2",
+                "000-rotation/R3",
+                "000-rotation/R4",
             ],
         )
         np.testing.assert_allclose(
-            configurations["Rotation-000/R1"], [[0, 1, 0]], atol=1e-14
+            configurations["000-rotation/R1"], [[0, 1, 0]], atol=1e-14
         )
         np.testing.assert_allclose(
-            configurations["Rotation-000/R2"], [[0, 0, -1]], atol=1e-14
+            configurations["000-rotation/R2"], [[0, 0, -1]], atol=1e-14
         )
 
     def test_rotation_rejects_zero_axis_and_unknown_parameters(self):
@@ -137,7 +137,7 @@ class TestRandom(unittest.TestCase):
         first_b = provider_b(moments, count_b)
 
         self.assertEqual(
-            list(first_a), ["Random-000/Rand1", "Random-000/Rand2", "Random-000/Rand3"]
+            list(first_a), ["000-random/Rand1", "000-random/Rand2", "000-random/Rand3"]
         )
         for name in first_a:
             np.testing.assert_array_equal(first_a[name], first_b[name])
@@ -199,7 +199,7 @@ class TestScale(unittest.TestCase):
         self.assertEqual(count, 4)
         self.assertEqual(
             list(configurations),
-            ["Scale-000/S1", "Scale-000/S2", "Scale-000/S3", "Scale-000/S4"],
+            ["000-scale/S1", "000-scale/S2", "000-scale/S3", "000-scale/S4"],
         )
         np.testing.assert_allclose(
             [configurations[name][0, 2] for name in configurations],
@@ -260,7 +260,7 @@ class TestRotaCant(unittest.TestCase):
         self.assertEqual(count_a, 8)
         self.assertEqual(
             list(configurations_a),
-            [f"Rota_Cant-000/RC{index}" for index in range(1, 9)],
+            [f"000-rota_cant/RC{index}" for index in range(1, 9)],
         )
         for name in configurations_a:
             np.testing.assert_array_equal(
@@ -315,25 +315,25 @@ class TestIndependentOperations(unittest.TestCase):
         self.assertEqual(
             list(configurations),
             [
-                "Rotation-000/R1",
-                "Rotation-000/R2",
-                "Scale-001/S1",
-                "Scale-001/S2",
-                "Scale-001/S3",
-                "Scale-001/S4",
+                "000-rotation/R1",
+                "000-rotation/R2",
+                "001-scale/S1",
+                "001-scale/S2",
+                "001-scale/S3",
+                "001-scale/S4",
             ],
         )
         np.testing.assert_allclose(
-            configurations["Rotation-000/R1"], [[0, 1, 0]], atol=1e-14
+            configurations["000-rotation/R1"], [[0, 1, 0]], atol=1e-14
         )
         np.testing.assert_allclose(
-            configurations["Rotation-000/R2"], [[-1, 0, 0]], atol=1e-14
+            configurations["000-rotation/R2"], [[-1, 0, 0]], atol=1e-14
         )
         np.testing.assert_allclose(
-            configurations["Scale-001/S1"], [[0.9, 0, 0]], atol=1e-14
+            configurations["001-scale/S1"], [[0.9, 0, 0]], atol=1e-14
         )
         np.testing.assert_allclose(
-            configurations["Scale-001/S4"], [[1.1, 0, 0]], atol=1e-14
+            configurations["001-scale/S4"], [[1.1, 0, 0]], atol=1e-14
         )
         np.testing.assert_array_equal(moments, [[1, 0, 0]])
 
@@ -351,14 +351,14 @@ class TestIndependentOperations(unittest.TestCase):
         self.assertEqual(count, 3)
         self.assertEqual(
             list(configurations),
-            ["Rotation-000/R1", "Canting-001/C1", "Rotation-002/R1"],
+            ["000-rotation/R1", "001-canting/C1", "002-rotation/R1"],
         )
         np.testing.assert_allclose(
-            configurations["Rotation-000/R1"], [[0, 1, 0]], atol=1e-14
+            configurations["000-rotation/R1"], [[0, 1, 0]], atol=1e-14
         )
-        np.testing.assert_array_equal(configurations["Canting-001/C1"], [[1, 0, 0]])
+        np.testing.assert_array_equal(configurations["001-canting/C1"], [[1, 0, 0]])
         np.testing.assert_allclose(
-            configurations["Rotation-002/R1"], [[0, 1, 0]], atol=1e-14
+            configurations["002-rotation/R1"], [[0, 1, 0]], atol=1e-14
         )
 
     def test_each_item_has_exactly_one_known_operation(self):
@@ -420,8 +420,8 @@ class TestIndependentOperations(unittest.TestCase):
             results_b = provider_b(moments, count_b)
             for index in (1, 2):
                 np.testing.assert_array_equal(
-                    results_a[f"Canting-000/C{index}"],
-                    results_b[f"Canting-001/C{index}"],
+                    results_a[f"000-canting/C{index}"],
+                    results_b[f"001-canting/C{index}"],
                 )
 
     def test_empty_operations_generate_only_baseline_at_task_layer(self):
@@ -514,7 +514,7 @@ class TestCanting(unittest.TestCase):
         second_next_snapshot = second_provider(moments, second_count)
 
         self.assertEqual(first_count, 2)
-        for name in ("Canting-000/C1", "Canting-000/C2"):
+        for name in ("000-canting/C1", "000-canting/C2"):
             np.testing.assert_array_equal(first_snapshot[name], second_snapshot[name])
             np.testing.assert_array_equal(
                 first_next_snapshot[name], second_next_snapshot[name]
@@ -532,7 +532,7 @@ class TestCanting(unittest.TestCase):
 
         self.assertEqual(count, 3)
         self.assertEqual(
-            list(configurations), ["Canting-000/C1", "Canting-000/C2", "Canting-000/C3"]
+            list(configurations), ["000-canting/C1", "000-canting/C2", "000-canting/C3"]
         )
         expected_cosines = [1.0, np.sqrt(3) / 2, -1.0]
         for name, expected_cosine in zip(configurations, expected_cosines):
@@ -552,7 +552,7 @@ class TestCanting(unittest.TestCase):
 
         self.assertEqual(count, 3)
         self.assertEqual(
-            list(configurations), ["Canting-000/C1", "Canting-001/C1", "Canting-001/C2"]
+            list(configurations), ["000-canting/C1", "001-canting/C1", "001-canting/C2"]
         )
         for name, angle in zip(configurations, (10, 20, 30)):
             np.testing.assert_allclose(
@@ -566,9 +566,9 @@ class TestCanting(unittest.TestCase):
 
         configurations = provider(np.array([[0, 0, 1.0]]), count)
 
-        self.assertEqual(list(configurations), ["Canting-000/C1"])
+        self.assertEqual(list(configurations), ["000-canting/C1"])
         np.testing.assert_allclose(
-            np.linalg.norm(configurations["Canting-000/C1"][0]), 1.0
+            np.linalg.norm(configurations["000-canting/C1"][0]), 1.0
         )
 
     def test_extreme_finite_moment_scales_do_not_underflow_or_overflow(self):

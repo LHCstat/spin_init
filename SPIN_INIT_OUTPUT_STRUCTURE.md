@@ -127,27 +127,27 @@ Stage 3 从零开始为 XDATCAR frame 编号，最少使用两位数字：
 origin/000000
 ```
 
-`origin` 是基准磁矩的分类层，与 `Rotation-000` 等分组并列。任务文件在其下的
+`origin` 是基准磁矩的分类层，与 `000-rotation` 等分组并列。任务文件在其下的
 `000000/`，不在 `origin/` 本身；这个变化不影响 Stage 1–3 的数字编号。
 
 其他构型按 `pert_spin` 字段的模式和输入序号分组：
 
 ```text
-Rotation-000/R1     输入第 1 个字段的第 1 个 Rotation 变体
-Canting-001/C2      输入第 2 个字段的第 2 个 Canting 变体
-Rota_Cant-002/RC1   输入第 3 个字段的第 1 个 Rota_Cant 变体
-Random-003/Rand3    输入第 4 个字段的第 3 个 Random 变体
-Scale-004/S4        输入第 5 个字段的第 4 个 Scale 变体
+000-rotation/R1     输入第 1 个字段的第 1 个 Rotation 变体
+001-canting/C2      输入第 2 个字段的第 2 个 Canting 变体
+002-rota_cant/RC1   输入第 3 个字段的第 1 个 Rota_Cant 变体
+003-random/Rand3    输入第 4 个字段的第 3 个 Random 变体
+004-scale/S4        输入第 5 个字段的第 4 个 Scale 变体
 ```
 
 组名后面的序号是从零开始的字段输入索引，最少三位，不是某种模式出现的次数。例如
-在第三个字段再次输入 Rotation，会创建 `Rotation-002`，不会与 `Rotation-000` 重名。
+在第三个字段再次输入 Rotation，会创建 `002-rotation`，不会与 `000-rotation` 重名。
 
 不同字段各自从初始磁矩出发，不会串联或跨字段做笛卡尔积。只有同一个字段内部的
 参数列表仍做组合，例如 Rotation 的 `angle × axis`、Rota_Cant 的
 `R_angle × axis × C_angle`。`Rota_Cant` 本身仍固定先 Rotation 再 Canting。
 
-每个局部变体目录对应一个独立 VASP task。`Rotation-000` 等组目录只是分类层，本身
+每个局部变体目录对应一个独立 VASP task。`000-rotation` 等组目录只是分类层，本身
 不直接放置 VASP 输入文件，也不是一个计算 task。
 
 ## 3. `00.scale_pert`：结构扰动结果
@@ -340,15 +340,15 @@ Stage 3 的两个检查相互独立：
             │       ├── OSZICAR
             │       ├── fp.log
             │       └── [user_forward_files]
-            ├── Rotation-000/
+            ├── 000-rotation/
             │   └── R1/
             │       └── ...
-            ├── Canting-001/
+            ├── 001-canting/
             │   ├── C1/
             │   │   └── ...
             │   └── C2/
             │       └── ...
-            └── Scale-002/
+            └── 002-scale/
                 ├── S1/
                 │   └── ...
                 └── S2/
@@ -366,7 +366,7 @@ Stage 3 的两个检查相互独立：
 ]
 ```
 
-每个输入模板对应一层 `incar-###`：
+每个输入模板对应一层 `###-incar`：
 
 ```text
 03.spin/
@@ -375,7 +375,7 @@ Stage 3 的两个检查相互独立：
 └── scale-1.000/
     └── 000000/
         └── 00/
-            ├── incar-000/
+            ├── 000-incar/
             │   ├── origin/
             │   │   └── 000000/
             │   │       ├── POSCAR
@@ -383,39 +383,39 @@ Stage 3 的两个检查相互独立：
             │   │       ├── INCAR
             │   │       ├── OUTCAR
             │   │       └── OSZICAR
-            │   ├── Rotation-000/
+            │   ├── 000-rotation/
             │   │   └── R1/
             │   │       └── ...
-            │   ├── Canting-001/
+            │   ├── 001-canting/
             │   │   ├── C1/
             │   │   │   └── ...
             │   │   └── C2/
             │   │       └── ...
-            │   └── Scale-002/
+            │   └── 002-scale/
             │       ├── S1/
             │       │   └── ...
             │       └── S2/
             │           └── ...
-            └── incar-001/
+            └── 001-incar/
                 ├── origin/
                 │   └── 000000/
                 │       └── ...
-                ├── Rotation-000/
+                ├── 000-rotation/
                 │   └── R1/
                 │       └── ...
-                ├── Canting-001/
+                ├── 001-canting/
                 │   ├── C1/
                 │   │   └── ...
                 │   └── C2/
                 │       └── ...
-                └── Scale-002/
+                └── 002-scale/
                     ├── S1/
                     │   └── ...
                     └── S2/
                         └── ...
 ```
 
-即使列表中只有一个路径，也会出现 `incar-000`：
+即使列表中只有一个路径，也会出现 `000-incar`：
 
 ```json
 "spin_incar": ["./INCAR.spin"]
@@ -436,7 +436,7 @@ snapshot → spin_incar 输入顺序 → pert_spin 字段输入顺序 → 局部
 例如下面这个路径：
 
 ```text
-03.spin/scale-1.000/000001/02/incar-001/Rotation-000/R2/INCAR
+03.spin/scale-1.000/000001/02/001-incar/000-rotation/R2/INCAR
 │       │           │      │  │         │            │  └─ 独立磁性 INCAR
 │       │           │      │  │         │            └──── 该 Rotation 字段第 2 个变体
 │       │           │      │  │         └───────────────── pert_spin 第 1 个字段
@@ -488,20 +488,21 @@ backward_files:
 ```json
 {
   "tasks": [
-    "scale-1.000/000000/00/incar-000/origin/000000",
-    "scale-1.000/000000/00/incar-000/Rotation-000/R1",
-    "scale-1.000/000000/00/incar-000/Canting-001/C1",
-    "scale-1.000/000000/00/incar-000/Scale-002/S1"
+    "scale-1.000/000000/00/000-incar/origin/000000",
+    "scale-1.000/000000/00/000-incar/000-rotation/R1",
+    "scale-1.000/000000/00/000-incar/001-canting/C1",
+    "scale-1.000/000000/00/000-incar/002-scale/S1"
   ]
 }
 ```
 
-清单记录的是最终局部变体目录，不是 `Rotation-000` 等分类目录。建议保留原始清单，
+清单记录的是最终局部变体目录，不是 `000-rotation` 等分类目录。建议保留原始清单，
 不要手工改动路径；这些路径必须对应真实目录并满足规定格式。
 
 新基准 task 的清单路径必须包含 `origin/000000`，不能只写 `origin`。
-旧版不含 `origin` 的基准路径和旧版未分组磁扰动路径仍可按清单运行，不会被自动改名
-或搬移。新布局只用于新生成的 `03.spin`。
+旧版的 `incar-000` 索引层、`Rotation-000` 等模式分组、不含 `origin` 的基准路径，
+以及未分组磁扰动路径仍可按清单运行，不会被自动改名或搬移。新布局只用于新生成的
+`03.spin`。
 
 ## 7. 完整示例目录树
 
@@ -551,16 +552,16 @@ run_spin/
 │   └── scale-1.000/
 │       ├── 000000/
 │       │   ├── 00/
-│       │   │   ├── incar-000/
+│       │   │   ├── 000-incar/
 │       │   │   │   ├── origin/000000/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   │   │   ├── Rotation-000/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   │   │   ├── Canting-001/
+│       │   │   │   ├── 000-rotation/R1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
+│       │   │   │   ├── 001-canting/
 │       │   │   │   │   ├── C1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 │       │   │   │   │   └── C2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   │   │   └── Scale-002/
+│       │   │   │   └── 002-scale/
 │       │   │   │       ├── S1/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
 │       │   │   │       └── S2/{POSCAR,POTCAR,INCAR,OUTCAR,OSZICAR}
-│       │   │   └── incar-001/
+│       │   │   └── 001-incar/
 │       │   │       └── ...
 │       │   ├── 01/
 │       │   │   └── ...
@@ -639,7 +640,8 @@ run_spin/
 
 各阶段不会静默覆盖同名阶段目录。例如 `02.disp` 已存在时再次执行 Stage 3 会明确报错；`03.spin` 已存在时应使用 `spin_action="run"` 提交已有任务。
 
-`run` 仍支持旧版本 `tasks.json` 中未分组的磁构型路径，包括旧的 `R1-C1-S1` 等名称。
+`run` 仍支持旧版本 `tasks.json` 中的 `incar-000` 索引层、`Rotation-000` 等模式分组，
+以及未分组磁构型路径（包括旧的 `R1-C1-S1` 等名称）。
 它不会改变已有 INCAR、迁移目录或按新参数重新扰动。若要生成独立字段分组的新布局，
 请指定新的 `out_dir`，而不是在旧 `03.spin` 上重复 `make`。如果只运行 Stage 4，
 新输出根目录下也必须先准备好对应的 `02.disp` 快照。
@@ -725,8 +727,8 @@ find run_spin/04.data -path '*/out/set/spin.npy' -type f
 - Stage 2 的 `000000` 表示未随机扰动的结构，不代表第零个 AIMD frame。
 - Stage 3 的 `00` 表示 XDATCAR 的第一个 frame。
 - Stage 4 的 `origin/000000` 表示未进行磁矩扰动的基准磁构型。
-- 单个字符串形式的 `spin_incar` 不增加 INCAR 索引层；列表形式始终增加 `incar-###` 层。
-- 不同 `pert_spin` 字段独立作用于初始磁矩；`<模式>-<字段序号>` 是分类层，局部变体才是计算 task。
+- 单个字符串形式的 `spin_incar` 不增加 INCAR 索引层；列表形式始终增加 `###-incar` 层。
+- 不同 `pert_spin` 字段独立作用于初始磁矩；`<字段序号>-<小写模式>` 是分类层，局部变体才是计算 task。
 - 同一字段内部的参数组合仍保留；只有 `Rota_Cant` 明确组合 Rotation 与 Canting。
 - `01.md` 固定回传 OUTCAR 和 XDATCAR；`03.spin` 固定回传 OUTCAR 和 OSZICAR。
   包含标准优化任务（`NSW>0, IBRION=1/2/3`）时，整批提交还自动追加回传 CONTCAR。
@@ -743,7 +745,7 @@ ISIF`，例如 `NSW=50, IBRION=2, ISIF=3` 允许结构和晶格优化，不增�
 每个优化 task 在原有文件之外多一个自动回传的普通文件 `CONTCAR`：
 
 ```text
-03.spin/.../Rotation-000/R1/
+03.spin/.../000-rotation/R1/
 ├── POSCAR -> 对应 02.disp 快照（初始结构，链接保持不变）
 ├── POTCAR -> 03.spin/POTCAR
 ├── INCAR

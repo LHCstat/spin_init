@@ -120,7 +120,7 @@ M_CONSTR = 0 0 2  0 0 0
 | `spin_action` | Stage 4 的 `make`、`run` 或 `make_run` |
 | `potcars` | 按 POSCAR 元素顺序排列的 POTCAR 片段路径列表 |
 
-有多个初始磁矩方案时，将 `spin_incar` 写为 `"spin_incar": ["./INCAR.state_1", "./INCAR.state_2"]`。每个模板分别生成一套基准和磁扰动任务，输出中增加 `incar-000`、`incar-001` 层；即使列表只有一个文件，也会有 `incar-000`。使用单个字符串时没有这一层。
+有多个初始磁矩方案时，将 `spin_incar` 写为 `"spin_incar": ["./INCAR.state_1", "./INCAR.state_2"]`。每个模板分别生成一套基准和磁扰动任务，输出中增加 `000-incar`、`001-incar` 层；即使列表只有一个文件，也会有 `000-incar`。使用单个字符串时没有这一层。
 
 ### 五种磁矩扰动模式
 
@@ -240,7 +240,9 @@ run_spin/
         └── out/{data.extxyz,*.raw,set/*.npy}
 ```
 
-`01.md` 和 `03.spin` task 的 POSCAR/POTCAR 是真实相对 symlink，不是普通副本。`03.spin` 的磁扰动任务与 `origin/` 同级分组，例如 `Canting-000/C1/`；多个 `spin_incar` 时，在 `00/` 与各组之间增加 `incar-000/` 等层。目录中的 `OUTCAR`、`XDATCAR`、`OSZICAR` 只有计算完成且回传后才存在。
+`01.md` 和 `03.spin` task 的 POSCAR/POTCAR 是真实相对 symlink，不是普通副本。`03.spin` 的磁扰动任务与 `origin/` 同级分组，例如 `000-canting/C1/`；多个 `spin_incar` 时，在 `00/` 与各组之间增加 `000-incar/` 等层。目录中的 `OUTCAR`、`XDATCAR`、`OSZICAR` 只有计算完成且回传后才存在。
+
+新建 Stage 4 使用“编号在前”的目录名。`spin_action="run"` 仍可读取旧清单中的 `incar-000` 和 `Rotation-000` 等目录，但不会自动重命名或搬移已有任务。
 
 Stage 5 比较初始 INCAR 与最终 OUTCAR 中**初始磁矩非零的原子**的磁矩模长，计算 `RMSE = sqrt(mean((|m_initial| - |m_final|)^2))`；大于 `5.0e-3` 的任务会记录在 `selection.json`，但不进入转换输入。通过筛选的 OUTCAR/OSZICAR 按 scale 编号收集；`convert-data` 生成 `out/data.extxyz`，随后 `out2npy` 一步生成并保留 raw 和 `set/*.npy`（`energy.npy` 为一维）。全部被筛除时会报错，而不是生成空数据集。
 
