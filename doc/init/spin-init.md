@@ -205,19 +205,19 @@ structural convergence marker emits a warning, not a convergence claim;
 `check_spin_results` returns the normally terminated task count. This is not
 electronic/magnetic convergence or magnetic-quality validation. Every OUTCAR
 must also contain `ions per type` whose sum equals the input POSCAR atom count;
-an output from a different structure is rejected before RMSE filtering.
+an output from a different structure is rejected before data collection.
 
 Stage 5 can be run alone with `"stages": [5]` after `03.spin` finishes, or
 included in `"stages": [1, 2, 3, 4, 5]`. It requires a MACHINE entry named
 `convert-data` (a single object or a one-element list). It reads
 `03.spin/tasks.json` and requires every saved task to have normally completed.
-For atoms with nonzero initial INCAR moments, the filter compares the norms
-of the initial and final OUTCAR `magnetization (x/y/z)` moments using
-`sqrt(mean((|MAGMOM_initial| - |moment_final|)^2))`. Tasks above `5.0e-3`
-are recorded in `04.data/selection.json` and excluded. Malformed or incomplete
-tasks raise an error instead of being treated as rejected samples.
+Stage 5 does not apply RMSE or magnetic-moment filtering. Every normally
+completed task in `03.spin/tasks.json` is included. `04.data/selection.json`
+records each source task, scale, and per-scale index; `rejected` is always an
+empty list. Malformed or incomplete tasks raise an error instead of being
+silently skipped.
 
-Accepted OUTCAR/OSZICAR pairs are numbered within each scale as `OUTCAR-1` and
+All OUTCAR/OSZICAR pairs are numbered within each scale as `OUTCAR-1` and
 `OSZICAR-1`, then sent to the `convert-data` command through DPDispatcher.
 The command must be a single line without shell comments. Its terminal simple
 command must be `nequip-data`; environment setup may precede it with `&&`, but
@@ -231,4 +231,4 @@ preserves `data.extxyz` alongside `type_map.raw`, `type.raw`, `box.raw`,
 `energy.npy` one-dimensional. `spin = spin_length * initial_magmoms`,
 `force_mag = spin_forces_vert`, and `virial = -volume * stress` as provided by
 the extxyz data. The number of exported frames is determined by convert-data,
-not assumed to equal the accepted task count. Stage 5 does not run VASP again.
+not assumed to equal the saved task count. Stage 5 does not run VASP again.

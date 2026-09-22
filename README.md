@@ -1,10 +1,10 @@
 # `spin_init` 使用说明
 
-`spin_init` 从已有 POSCAR 出发，生成结构扰动、运行 VASP AIMD、将 XDATCAR 逐帧转为 POSCAR，再为每帧建立非共线磁性计算。最后可按磁矩偏差筛选结果，导出 DeepMD 磁性数据。
+`spin_init` 从已有 POSCAR 出发，生成结构扰动、运行 VASP AIMD、将 XDATCAR 逐帧转为 POSCAR，再为每帧建立非共线磁性计算，最后汇总全部已完成任务并导出 DeepMD 磁性数据。
 
 ```text
 POSCAR → 00.scale_pert → 01.md (AIMD) → 02.disp (POSCAR snapshots)
-       → 03.spin (磁性 VASP 任务) → 04.data (筛选后的 DeepMD 数据)
+       → 03.spin (磁性 VASP 任务) → 04.data (DeepMD 数据)
 ```
 
 命令：
@@ -244,7 +244,7 @@ run_spin/
 
 新建 Stage 4 使用“编号在前”的目录名。`spin_action="run"` 仍可读取旧清单中的 `incar-000` 和 `Rotation-000` 等目录，但不会自动重命名或搬移已有任务。
 
-Stage 5 比较初始 INCAR 与最终 OUTCAR 中**初始磁矩非零的原子**的磁矩模长，计算 `RMSE = sqrt(mean((|m_initial| - |m_final|)^2))`；大于 `5.0e-3` 的任务会记录在 `selection.json`，但不进入转换输入。通过筛选的 OUTCAR/OSZICAR 按 scale 编号收集；`convert-data` 生成 `out/data.extxyz`，随后 `out2npy` 一步生成并保留 raw 和 `set/*.npy`（`energy.npy` 为一维）。全部被筛除时会报错，而不是生成空数据集。
+Stage 5 不再进行 RMSE 筛选。它确认 `tasks.json` 中所有磁性任务正常完成后，将全部 OUTCAR/OSZICAR 按 scale 连续编号并送入转换；`selection.json` 保留来源 task、scale 和编号，`rejected` 固定为空。`convert-data` 生成 `out/data.extxyz`，随后 `out2npy` 一步生成并保留 raw 和 `set/*.npy`（`energy.npy` 为一维）。
 
 详细编号、单/多 INCAR 目录差异、文件来源及 Stage 5 文件树见 [输出目录结构详解](SPIN_INIT_OUTPUT_STRUCTURE.md)。
 

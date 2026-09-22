@@ -11,7 +11,7 @@ POSCAR
   → VASP AIMD
   → XDATCAR → 独立 POSCAR snapshots
   → 非共线磁性静态或优化 VASP task
-  → 磁矩 RMSE 筛选 → DeepMD 磁性数据
+  → 汇总全部已完成磁性任务 → DeepMD 磁性数据
 ```
 
 命令为：
@@ -28,7 +28,7 @@ dpgen spin_init PARAM [MACHINE]
 | 2 | 建立 AIMD task；提供 MACHINE 时提交 | `01.md` |
 | 3 | 检查 OUTCAR、解析 XDATCAR、导出快照 | `02.disp` |
 | 4 | 为每个快照建立/提交磁性静态或优化计算 | `03.spin` |
-| 5 | 检查磁性结果、按 RMSE 筛选并导出 DeepMD 数据 | `04.data` |
+| 5 | 检查并汇总全部磁性结果，导出 DeepMD 数据 | `04.data` |
 
 ## 输入文件
 
@@ -450,7 +450,7 @@ dpgen spin_init spin-init.json machine.json
 生成任务，请使用新的 `out_dir`；只运行 Stage 4 时，
 该根目录下必须先准备好对应的 `02.disp` 快照。
 
-## Stage 5：磁矩筛选与 DeepMD 数据导出
+## Stage 5：磁性任务汇总与 DeepMD 数据导出
 
 完成 `03.spin` 全部计算并回传 OUTCAR、OSZICAR 后，将 PARAM 改成
 `"stages": [5]`，运行 `dpgen spin_init PARAM MACHINE`；也可以在完整流程
@@ -459,13 +459,12 @@ dpgen spin_init spin-init.json machine.json
 参数文件仍须保留统一 schema 规定的 POSCAR、MD INCAR、结构扰动等字段，
 但 Stage 5 不重新读取这些输入。
 
-先检查所有磁性任务是否正常结束；任何任务缺失或
-未完成都会报出其路径，不会混同为 RMSE 淘汰。然后从各任务 INCAR 读取初始
-`MAGMOM`，从最终 OUTCAR 的 x/y/z 磁矩表读取末态磁矩，计算初始非零磁矩原子的
-模长 RMSE：`sqrt(mean((|M_initial| - |M_final|)^2))`。超过 `5.0e-3` 的任务
-只被排除，不影响其余合格任务，并记入 `selection.json`；没有合格任务则报错。
+Stage 5 先检查所有磁性任务是否正常结束；任何任务缺失或未完成都会报出其路径。
+它不再比较初始/末态磁矩或执行 RMSE 筛选，`tasks.json` 中的全部已完成任务都会
+进入转换。`selection.json` 记录所有任务的来源路径、scale 和 scale 内编号，
+`rejected` 固定为空。
 
-合格任务的 OUTCAR/OSZICAR 按 scale 编号作为 `convert-data` 的输入，
+全部任务的 OUTCAR/OSZICAR 按 scale 编号作为 `convert-data` 的输入，
 由该程序生成每个 scale 的 `out/data.extxyz`。随后 `out2npy` 一步在
 `out/` 写入 `type_map.raw`、`type.raw`、`box.raw`、`coord.raw`、
 `energy.raw`、`force.raw`、`force_mag.raw`、`spin.raw`、`virial.raw`，

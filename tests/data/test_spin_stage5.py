@@ -38,8 +38,8 @@ class TestSpinStage5(unittest.TestCase):
             (folder / "OSZICAR").write_text("magnetic force data\n")
         return stage, paths
 
-    def test_rmse_selection_numbers_each_scale_from_one(self):
-        """A rejected task must not enter converter input or consume an index."""
+    def test_all_completed_tasks_are_numbered_per_scale_without_rmse(self):
+        """Every completed task must enter conversion regardless of moment drift."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _, paths = self._make_tasks(root)
@@ -50,11 +50,13 @@ class TestSpinStage5(unittest.TestCase):
             [(row["scale"], row["index"], row["task"]) for row in selection["selected"]],
             [
                 ("scale-1.000", 1, paths[0]),
+                ("scale-1.000", 2, paths[1]),
                 ("scale-1.020", 1, paths[2]),
             ],
         )
-        self.assertEqual([row["task"] for row in selection["rejected"]], [paths[1]])
-        self.assertEqual(selection["rmse_limit"], 5.0e-3)
+        self.assertEqual(selection["rejected"], [])
+        self.assertNotIn("rmse_limit", selection)
+        self.assertTrue(all("rmse" not in row for row in selection["selected"]))
 
     def test_converter_input_uses_get_outcar_flat_pair_names(self):
         """The converter needs data/OUTCAR-N and data/OSZICAR-N pairs."""
@@ -69,12 +71,18 @@ class TestSpinStage5(unittest.TestCase):
             self.assertEqual(scales, ["scale-1.000", "scale-1.020"])
             for scale in scales:
                 folder = scratch / scale / "data"
+                count = 2 if scale == "scale-1.000" else 1
                 self.assertEqual(
                     sorted(path.name for path in folder.iterdir()),
-                    ["OSZICAR-1", "OUTCAR-1"],
+                    sorted(
+                        f"{name}-{index}"
+                        for index in range(1, count + 1)
+                        for name in ("OUTCAR", "OSZICAR")
+                    ),
                 )
-                self.assertTrue((folder / "OUTCAR-1").is_file())
-                self.assertTrue((folder / "OSZICAR-1").is_file())
+                for index in range(1, count + 1):
+                    self.assertTrue((folder / f"OUTCAR-{index}").is_file())
+                    self.assertTrue((folder / f"OSZICAR-{index}").is_file())
             self.assertNotIn("1.02", (scratch / "scale-1.000/data/OUTCAR-1").read_text())
 
     @mock.patch("dpgen.data.spin_stage5.make_submission")
@@ -253,7 +261,12 @@ class TestSpinStage5(unittest.TestCase):
                 self.assertTrue(linked.is_symlink())
                 self.assertFalse(os.path.isabs(os.readlink(linked)))
                 self.assertEqual(linked.resolve(), source.resolve())
-                for name in ("OUTCAR-1", "OSZICAR-1"):
+                count = 2 if scale == "scale-1.000" else 1
+                for name in (
+                    f"{kind}-{index}"
+                    for index in range(1, count + 1)
+                    for kind in ("OUTCAR", "OSZICAR")
+                ):
                     self.assertTrue((source / name).is_symlink())
                     self.assertFalse(os.path.isabs(os.readlink(source / name)))
                     self.assertTrue((linked / name).is_file())
@@ -334,8 +347,9 @@ class TestSpinStage5(unittest.TestCase):
                 self.assertEqual(energy.shape, (2,))
                 np.testing.assert_allclose(energy, [-1, -2])
             selection = json.loads((root / "04.data/selection.json").read_text())
-            self.assertEqual(len(selection["selected"]), 2)
-            self.assertEqual(len(selection["rejected"]), 1)
+            self.assertEqual(len(selection["selected"]), 3)
+            self.assertEqual(selection["rejected"], [])
+            self.assertNotIn("rmse_limit", selection)
 
     def test_missing_converter_output_does_not_publish_stage(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -39,7 +39,7 @@
 03.spin                         对每个 snapshot 的初始磁矩进行独立分组扰动并计算
     │ OUTCAR + OSZICAR
     ▼
-04.data                         末态磁矩 RMSE 筛选、extxyz 多帧转换为 raw/npy
+04.data                         全部已完成磁性任务转换为 extxyz、raw 和 npy
 ```
 
 输出根目录就是 `param.json` 中的 `out_dir`，程序不会在名称后面自动增加后缀。例如：
@@ -623,8 +623,8 @@ run_spin/
 ```
 
 如果不同 AIMD task 的 frame 数量不同，则 `02.disp` 和 `03.spin` 的实际数量应分别对每个 task 的 frame 数量求和。
-`04.data` 的实际帧数由 `convert-data` 回传的 `data.extxyz` 决定；RMSE
-按每个 task 的末态磁矩筛选整个 task，不会假定每个合格 task 恰好只贡献一帧。
+`04.data` 的实际帧数由 `convert-data` 回传的 `data.extxyz` 决定；Stage 5 不进行
+RMSE 筛选，也不会假定每个磁性 task 恰好只贡献一帧。
 
 ## 9. 分阶段运行时的目录依赖
 
@@ -718,7 +718,7 @@ find run_spin/04.data -path '*/out/data.extxyz' -type f
 find run_spin/04.data -path '*/out/set/spin.npy' -type f
 ```
 
-`selection.json` 的 `selected` 为合格 task，`rejected` 为 RMSE 超阈值 task；
+`selection.json` 的 `selected` 包含全部已完成 task，`rejected` 固定为空；
 每个 scale 下的 `out/set/*.npy` 应具有相同的第一维；`energy.npy` 为一维。
 
 ## 11. 重要说明
@@ -765,16 +765,15 @@ task 被要求通过最终结构校验。CONTCAR 必须非空、可被 pymatgen 
 具体输入及检查规则见
 [Stage 4 结构与晶格优化](doc/init/spin-init-usage.md#stage-4-结构与晶格优化)。
 
-## 13. `04.data`：RMSE 筛选与 extxyz 转换
+## 13. `04.data`：全部磁性任务的 extxyz 转换
 
 Stage 5 可单独以 `"stages": [5]` 运行，但需要 MACHINE 中的 `convert-data`
-配置。它要求 `03.spin/tasks.json` 中的任务正常结束，再对初始非零磁矩原子比较
-INCAR/OUTCAR 磁矩模长。RMSE 为 `sqrt(mean((|m_initial|-|m_final|)^2))`，
-阈值 `5.0e-3`。不合格任务只记录在 `selection.json`，不会送入转换。
+配置。它要求 `03.spin/tasks.json` 中的任务全部正常结束，然后将所有任务送入转换，
+不再比较初始/末态磁矩或执行 RMSE 筛选。
 
 ```text
 03.spin/scale-1.000/data/
-├── OUTCAR-1 -> 合格磁性任务的 OUTCAR
+├── OUTCAR-1 -> 已完成磁性任务的 OUTCAR
 └── OSZICAR-1 -> 同一任务的 OSZICAR
 04.data/
 ├── selection.json
@@ -798,7 +797,7 @@ INCAR/OUTCAR 磁矩模长。RMSE 为 `sqrt(mean((|m_initial|-|m_final|)^2))`，
 `spin_length × initial_magmoms` 得到，`force_mag` 对应
 `spin_forces_vert`，`virial = -体积 × stress`。
 
-`selection.json` 含 `rmse_limit`、`selected`、`rejected`；合格记录包括
-来源 task、scale、该 scale 内的编号和 RMSE。任务缺失或未正常完成会报错，
-不会当成 RMSE 淘汰；全部任务被筛除时也不会生成空数据集。
+`selection.json` 含 `selected` 和 `rejected`；`selected` 中每条记录包括来源 task、
+scale 和该 scale 内的编号，`rejected` 固定为空。任务缺失或未正常完成会直接报错，
+不会静默跳过。
 已有 `04.data` 不会被覆盖。

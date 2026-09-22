@@ -1,4 +1,4 @@
-"""Stage 5: RMSE selection and scale-wise convert-data orchestration."""
+"""Stage 5: scale-wise convert-data orchestration for completed spin tasks."""
 
 import json
 import os
@@ -7,10 +7,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from dpgen import dlog
 from dpgen.data.out2npy import convert_extxyz_to_raw
-from dpgen.data.spin_data import RMSE_LIMIT, magnetic_rmse, read_final_magnetization
-from dpgen.data.spin_tasks import _saved_tasks, check_spin_results, read_spin_incar
+from dpgen.data.spin_tasks import _saved_tasks, check_spin_results
 from dpgen.dispatcher.Dispatcher import make_submission
 from dpgen.generator.lib.utils import check_api_version
 from dpgen.remote.decide_machine import convert_mdata
@@ -66,29 +64,12 @@ def _convert_command(command):
 
 
 def select_spin_tasks(jdata):
-    """Check completion, then retain tasks whose final moment RMSE passes."""
-    from pymatgen.io.vasp.inputs import Poscar
-
-    stage, tasks = _saved_tasks(jdata)
+    """Check completion, then number every task within its scale."""
+    _, tasks = _saved_tasks(jdata)
     check_spin_results(jdata)
     selected = []
-    rejected = []
     next_index = {}
     for task in tasks:
-        folder = stage / task
-        try:
-            natoms = len(Poscar.from_file(folder / "POSCAR").structure)
-            _, initial = read_spin_incar(folder / "INCAR", natoms)
-            _, final = read_final_magnetization(folder / "OUTCAR", natoms)
-            rmse = magnetic_rmse(initial, final)
-        except Exception as error:
-            raise RuntimeError(f"spin data task {task}: {error}") from error
-        if rmse > RMSE_LIMIT:
-            rejected.append(
-                {"task": task, "rmse": rmse, "reason": "RMSE exceeds 5.0e-3"}
-            )
-            dlog.warning("spin data task %s rejected: RMSE %.8g", task, rmse)
-            continue
         scale = task.split("/", 1)[0]
         next_index[scale] = next_index.get(scale, 0) + 1
         selected.append(
@@ -96,15 +77,9 @@ def select_spin_tasks(jdata):
                 "task": task,
                 "scale": scale,
                 "index": next_index[scale],
-                "rmse": rmse,
             }
         )
-    if not selected:
-        raise RuntimeError(
-            f"no spin tasks passed RMSE <= {RMSE_LIMIT:g}; "
-            f"rejected {len(rejected)} of {len(tasks)} tasks"
-        )
-    return {"rmse_limit": RMSE_LIMIT, "selected": selected, "rejected": rejected}
+    return {"selected": selected, "rejected": []}
 
 
 def prepare_converter_inputs(stage, scratch, selection):
@@ -237,7 +212,7 @@ def publish_scale_links(stage, scratch, destination, selection):
 
 
 def collect_spin_data(jdata, mdata):
-    """Run RMSE selection, convert-data, and extxyz/raw/npy export."""
+    """Convert every completed spin task to extxyz, raw, and npy data."""
     root = Path(jdata.get("out_dir", ".")).resolve()
     destination = root / "04.data"
     if destination.exists() or destination.is_symlink():

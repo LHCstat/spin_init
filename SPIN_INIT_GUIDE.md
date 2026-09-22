@@ -13,7 +13,7 @@ POSCAR
   → 01.md：VASP AIMD
   → 02.disp：XDATCAR 的逐帧 POSCAR
   → 03.spin：每个快照的非共线磁性静态或结构/晶格优化 VASP task
-  → 04.data：磁矩 RMSE 筛选和 DeepMD 磁性数据导出
+  → 04.data：汇总全部已完成任务并导出 DeepMD 磁性数据
 ```
 
 这是独立命令，不改变 `dpgen init_bulk`。stage 4 已完成输入验证、五种磁矩操作的独立
@@ -222,7 +222,7 @@ dpgen spin_init spin-init.json
 # stages=[4], spin_action="run"：提交已有 03.spin
 dpgen spin_init spin-init.json machine.json
 
-# stages=[5]：筛选已完成的磁性任务并导出 04.data
+# stages=[5]：汇总已完成的磁性任务并导出 04.data
 dpgen spin_init spin-init.json machine.json
 ```
 
@@ -294,7 +294,7 @@ stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICA
 - DPCloudServerContext 报 `name 'oss2' is not defined` 时，安装
   `dpdispatcher[bohrium]`。当前代码会在提交前给出明确提示。
 
-## 8. Stage 5：磁性数据筛选与导出
+## 8. Stage 5：磁性数据汇总与导出
 
 `03.spin` 中的 VASP 任务全部正常结束且 OUTCAR、OSZICAR 已回传后，
 将 PARAM 中的 `stages` 改为 `[5]`，执行：
@@ -304,12 +304,11 @@ dpgen spin_init spin-init.json machine.json
 ```
 
 也可在完整流程中使用 `stages=[1,2,3,4,5]`。Stage 5 不再次运行 VASP，
-但需要 MACHINE 中的 `convert-data` 配置提交 `nequip-data`。它比较初始 INCAR
-与最终 OUTCAR 中非零初始磁矩原子的模长，RMSE 超过 `5.0e-3` 的任务会被排除。
-每个 scale 的合格 OUTCAR/OSZICAR 按 `OUTCAR-1`/`OSZICAR-1` 编号收集，
+但需要 MACHINE 中的 `convert-data` 配置提交 `nequip-data`。Stage 5 不进行 RMSE
+筛选；每个 scale 的全部已完成 OUTCAR/OSZICAR 按 `OUTCAR-1`/`OSZICAR-1` 编号收集，
 并在 `04.data/scale-*/data` 建立指向 `03.spin/scale-*/data` 的相对链接。
 `convert-data` 回传 `04.data/scale-*/out/data.extxyz`；同一个 `out/` 下保留
-`*.raw` 和 `set/*.npy`。`energy.npy` 为一维；`04.data/selection.json` 记录编号、来源任务及 RMSE。
+`*.raw` 和 `set/*.npy`。`energy.npy` 为一维；`04.data/selection.json` 记录编号、来源任务和 scale，`rejected` 固定为空。
 目前转换提交使用临时工作目录；若在提交后中断，重新执行不会自动恢复原远端任务。
 重跑前先确认原任务已结束，避免重复提交。
-更多字段与版本约定见 [使用说明](doc/init/spin-init-usage.md#stage-5磁矩筛选与-deepmd-数据导出)。
+更多字段与版本约定见 [使用说明](doc/init/spin-init-usage.md#stage-5磁性任务汇总与-deepmd-数据导出)。
