@@ -190,7 +190,7 @@ Canting、Rota_Cant、Random 的 `seed` 是可选非负整数。每个随机操�
 `vasp_std`、磁性计算使用 `vasp_ncl`，可在同一 JSON 中再加一个结构完全相同的 `spin`
 项，并把它的 command 写为 `srun vasp_ncl`。没有 `spin` 项时，stage 4 自动复用 `fp`。
 Stage 5 使用独立的 `convert-data` 项；它从每个 scale 的 `data/` 生成
-`out/data.extxyz`，再由 `out2npy` 写入 raw 和 `out/set/*.npy`。`command`
+`out/data.extxyz`，再由 `out2npy` 写入 raw 和 `out/set.000/*.npy`。`command`
 最后一条简单命令必须是 `nequip-data`；程序会创建远端 `out/`，并自动补齐缺少的
 `-p data -o out/data.extxyz`。若命令自行写出这两个参数，其值必须完全一致。
 可在前面使用 `source ... &&` 激活环境，但 `nequip-data` 后不要再接其他命令或管道。
@@ -266,7 +266,7 @@ run_spin/
             ├── data.extxyz
             ├── {box,coord,energy,force,force_mag,spin,virial}.raw
             ├── type.raw、type_map.raw
-            └── set/{box,coord,energy,force,force_mag,spin,virial}.npy
+            └── set.000/{box,coord,energy,force,force_mag,spin,virial}.npy
 ```
 
 `01.md` 和 `03.spin` 的 POSCAR/POTCAR 都使用真实相对 symbolic link。stage-4 INCAR
@@ -308,7 +308,7 @@ dpgen spin_init spin-init.json machine.json
 筛选；每个 scale 的全部已完成 OUTCAR/OSZICAR 按 `OUTCAR-1`/`OSZICAR-1` 编号收集，
 并在 `04.data/scale-*/data` 建立指向 `03.spin/scale-*/data` 的相对链接。
 `convert-data` 回传 `04.data/scale-*/out/data.extxyz`；同一个 `out/` 下保留
-`*.raw` 和 `set/*.npy`。`energy.npy` 为一维；`04.data/selection.json` 记录编号、来源任务和 scale，`rejected` 固定为空。
+`*.raw` 和 `set.000/*.npy`。`energy.npy` 为一维；`04.data/selection.json` 记录编号、来源任务和 scale，`rejected` 固定为空。
 目前转换提交使用临时工作目录；若在提交后中断，重新执行不会自动恢复原远端任务。
 重跑前先确认原任务已结束，避免重复提交。
 更多字段与版本约定见 [使用说明](doc/init/spin-init-usage.md#stage-5磁性任务汇总与-deepmd-数据导出)。

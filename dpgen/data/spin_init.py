@@ -1,4 +1,4 @@
-"""Generate VASP AIMD snapshots, spin tasks, and filtered magnetic data."""
+"""Generate VASP AIMD snapshots, spin tasks, and magnetic training data."""
 
 import os
 import shutil

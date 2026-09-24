@@ -1,4 +1,4 @@
-"""Convert multi-frame magnetic extxyz to raw files and ``set/*.npy``."""
+"""Convert multi-frame magnetic extxyz to raw files and ``set.000/*.npy``."""
 
 import argparse
 import shlex
@@ -134,7 +134,7 @@ def _read_frame(source, frame_number):
 
 def _write_npy_files(scratch, frame_number):
     """Create float64 arrays from the raw rows without dropping single frames."""
-    set_dir = scratch / "set"
+    set_dir = scratch / "set.000"
     set_dir.mkdir()
     for name in FRAME_FILES:
         values = np.loadtxt(scratch / name, dtype=np.float64, ndmin=2)
@@ -154,7 +154,7 @@ def convert_extxyz_to_raw(input_path, output_dir):
         raise FileNotFoundError(f"extxyz input does not exist: {input_path}")
     if output_dir.is_symlink() or (output_dir.exists() and not output_dir.is_dir()):
         raise FileExistsError(f"output is not a regular directory: {output_dir}")
-    artifacts = ["type_map.raw", "type.raw", *FRAME_FILES, "set"]
+    artifacts = ["type_map.raw", "type.raw", *FRAME_FILES, "set.000"]
     if output_dir.exists():
         for name in artifacts:
             target = output_dir / name
@@ -220,7 +220,7 @@ def convert_extxyz_to_raw(input_path, output_dir):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("extxyz", help="multi-frame data.extxyz")
-    parser.add_argument("output", help="directory for raw files and set/*.npy")
+    parser.add_argument("output", help="directory for raw files and set.000/*.npy")
     args = parser.parse_args(argv)
     try:
         convert_extxyz_to_raw(args.extxyz, args.output)

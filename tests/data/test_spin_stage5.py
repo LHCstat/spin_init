@@ -237,9 +237,10 @@ class TestSpinStage5(unittest.TestCase):
             self.assertTrue((out / "data.extxyz").is_file())
             self.assertTrue((out / "spin.raw").is_file())
             self.assertTrue((out / "force_mag.raw").is_file())
-            energy = np.load(out / "set/energy.npy")
+            energy = np.load(out / "set.000/energy.npy")
             self.assertEqual(energy.shape, (2,))
             np.testing.assert_allclose(energy, [-1, -2])
+            self.assertFalse((out / "set").exists())
 
     def test_final_data_links_match_pdf_and_get_outcar_layout(self):
         """The published data dirs and numbered inputs must be real relative links."""
@@ -343,7 +344,7 @@ class TestSpinStage5(unittest.TestCase):
                 out = root / "04.data" / scale / "out"
                 self.assertTrue((out / "data.extxyz").is_file())
                 self.assertTrue((out / "spin.raw").is_file())
-                energy = np.load(out / "set/energy.npy")
+                energy = np.load(out / "set.000/energy.npy")
                 self.assertEqual(energy.shape, (2,))
                 np.testing.assert_allclose(energy, [-1, -2])
             selection = json.loads((root / "04.data/selection.json").read_text())

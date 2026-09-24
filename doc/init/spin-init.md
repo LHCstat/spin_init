@@ -9,8 +9,8 @@ five stages:
    frame as a POSCAR under `02.disp`;
 4. create/run baseline and independently perturbed noncollinear VASP
    calculations for every exported snapshot under `03.spin`;
-5. filter tasks by final magnetic moments, run `convert-data`, and write
-   magnetic raw/npy data under `04.data/scale-*/out`.
+5. collect every normally completed magnetic task, run `convert-data`, and
+   write magnetic raw/npy data under `04.data/scale-*/out`.
 
 ```bash
 dpgen spin_init PARAM [MACHINE]
@@ -130,7 +130,7 @@ workflow accepts one initial POSCAR.
 03.spin/scale-1.000/data/{OUTCAR-1,OSZICAR-1,...}
 04.data/selection.json
 04.data/scale-1.000/data -> 03.spin/scale-1.000/data
-04.data/scale-1.000/out/{data.extxyz,type.raw,coord.raw,spin.raw,force_mag.raw,set/}
+04.data/scale-1.000/out/{data.extxyz,type.raw,coord.raw,spin.raw,force_mag.raw,set.000/}
 ```
 
 With a `spin_incar` list, the stage-4 paths instead become, for example:
@@ -211,8 +211,8 @@ Stage 5 can be run alone with `"stages": [5]` after `03.spin` finishes, or
 included in `"stages": [1, 2, 3, 4, 5]`. It requires a MACHINE entry named
 `convert-data` (a single object or a one-element list). It reads
 `03.spin/tasks.json` and requires every saved task to have normally completed.
-Stage 5 does not apply RMSE or magnetic-moment filtering. Every normally
-completed task in `03.spin/tasks.json` is included. `04.data/selection.json`
+Every normally completed task in `03.spin/tasks.json` is included in Stage 5.
+`04.data/selection.json`
 records each source task, scale, and per-scale index; `rejected` is always an
 empty list. Malformed or incomplete tasks raise an error instead of being
 silently skipped.
@@ -227,7 +227,7 @@ Explicit options must use those exact paths. DPDispatcher retrieves that file.
 `out2npy` converts every extxyz frame in one pass and
 preserves `data.extxyz` alongside `type_map.raw`, `type.raw`, `box.raw`,
 `coord.raw`, `energy.raw`, `force.raw`, `force_mag.raw`, `spin.raw`, and
-`virial.raw`. The corresponding float64 arrays live in `out/set/`, with
+`virial.raw`. The corresponding float64 arrays live in `out/set.000/`, with
 `energy.npy` one-dimensional. `spin = spin_length * initial_magmoms`,
 `force_mag = spin_forces_vert`, and `virial = -volume * stress` as provided by
 the extxyz data. The number of exported frames is determined by convert-data,

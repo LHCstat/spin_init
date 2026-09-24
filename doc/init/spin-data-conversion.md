@@ -3,7 +3,7 @@
 `out2npy` 一步将 `convert-data` 生成的多帧 `data.extxyz` 转成磁性数据集：
 
 ```text
-data.extxyz → out2npy → output/*.raw + output/set/*.npy
+data.extxyz → out2npy → output/*.raw + output/set.000/*.npy
 ```
 
 需要 Python 3.9 或更新版本、NumPy，并在同一 Python 环境中安装本项目。
@@ -14,7 +14,7 @@ python -m dpgen.data.out2npy /path/to/data.extxyz /path/to/output
 ```
 
 第二个参数是输出目录。目录不存在时会创建；如果目录已存在（例如 Stage 5
-的 `out/` 中已有 `data.extxyz`），只要没有同名 raw 文件和 `set/`，也可以使用。
+的 `out/` 中已有 `data.extxyz`），只要没有同名 raw 文件和 `set.000/`，也可以使用。
 已有同名结果不会被覆盖。无需再运行第二个转换脚本。
 
 输入可包含多帧，但原子数、元素及顺序必须一致。每帧的注释行需要
@@ -35,7 +35,7 @@ output/
 ├── force_mag.raw
 ├── spin.raw
 ├── virial.raw
-└── set/
+└── set.000/
     ├── box.npy
     ├── coord.npy
     ├── energy.npy

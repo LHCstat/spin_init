@@ -69,7 +69,7 @@ class TestOut2Npy(unittest.TestCase):
             }
             for name, shape in expected_shapes.items():
                 with self.subTest(name=name):
-                    actual = np.load(output / "set" / (name + ".npy"))
+                    actual = np.load(output / "set.000" / (name + ".npy"))
                     self.assertEqual(actual.shape, shape)
                     self.assertEqual(actual.dtype, np.dtype("float64"))
                     np.testing.assert_allclose(
@@ -78,6 +78,7 @@ class TestOut2Npy(unittest.TestCase):
                     )
             self.assertTrue((output / "type.raw").is_file())
             self.assertTrue((output / "type_map.raw").is_file())
+            self.assertFalse((output / "set").exists())
 
     def test_existing_output_with_extxyz_is_supported_and_preserved(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -94,7 +95,7 @@ class TestOut2Npy(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(source.read_text(), EXTXYZ_TWO_FRAMES)
-            self.assertEqual(np.load(output / "set/energy.npy").shape, (2,))
+            self.assertEqual(np.load(output / "set.000/energy.npy").shape, (2,))
 
     def test_existing_raw_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -112,7 +113,28 @@ class TestOut2Npy(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((output / "energy.raw").read_text(), "keep me")
-            self.assertFalse((output / "set").exists())
+            self.assertFalse((output / "set.000").exists())
+
+    def test_existing_set_000_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            set_dir = output / "set.000"
+            set_dir.mkdir(parents=True)
+            marker = set_dir / "keep.txt"
+            marker.write_text("keep me")
+            source = output / "data.extxyz"
+            source.write_text(EXTXYZ_TWO_FRAMES)
+
+            result = subprocess.run(
+                [sys.executable, "-m", "dpgen.data.out2npy", str(source), str(output)],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("set.000", result.stderr)
+            self.assertEqual(marker.read_text(), "keep me")
+            self.assertFalse((output / "energy.raw").exists())
 
     def test_single_frame_keeps_energy_one_dimensional(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -128,8 +150,8 @@ class TestOut2Npy(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(np.load(output / "set/energy.npy").shape, (1,))
-            self.assertEqual(np.load(output / "set/coord.npy").shape, (1, 6))
+            self.assertEqual(np.load(output / "set.000/energy.npy").shape, (1,))
+            self.assertEqual(np.load(output / "set.000/coord.npy").shape, (1, 6))
 
     def test_incomplete_frame_does_not_publish_partial_files(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -147,7 +169,7 @@ class TestOut2Npy(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertTrue(source.is_file())
             self.assertFalse((output / "energy.raw").exists())
-            self.assertFalse((output / "set").exists())
+            self.assertFalse((output / "set.000").exists())
 
 
 if __name__ == "__main__":

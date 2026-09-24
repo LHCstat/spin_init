@@ -148,7 +148,7 @@ def spin_init_jdata_arginfo() -> Argument:
                 doc="Stage 4: make, run (existing tasks), or make_run. Without MACHINE, make_run only prepares.",
             ),
         ],
-        doc="Generate VASP AIMD snapshots, spin tasks, and filtered magnetic data.",
+        doc="Generate VASP AIMD snapshots, spin tasks, and magnetic training data.",
     )
 
 
