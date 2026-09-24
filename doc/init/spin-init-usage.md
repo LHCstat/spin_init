@@ -1,5 +1,7 @@
 # `spin_init` 使用说明
 
+[English](spin-init-usage-en.md) | 中文
+
 ## 作用与流程
 
 `spin_init` 从一个已有 POSCAR 出发，生成结构扰动后的 VASP AIMD 任务，拆分 XDATCAR
@@ -415,7 +417,7 @@ out_dir/
             ├── data.extxyz
             ├── type.raw、type_map.raw、box.raw、coord.raw、energy.raw、force.raw
             ├── force_mag.raw、spin.raw、virial.raw
-            └── set/{box,coord,energy,force,force_mag,spin,virial}.npy
+            └── set.000/{box,coord,energy,force,force_mag,spin,virial}.npy
 ```
 
 stage 2 固定回传 OUTCAR 和 XDATCAR；stage 4 固定回传 OUTCAR 和 OSZICAR，包含优化
@@ -468,7 +470,7 @@ Stage 5 先检查所有磁性任务是否正常结束；任何任务缺失或未
 由该程序生成每个 scale 的 `out/data.extxyz`。随后 `out2npy` 一步在
 `out/` 写入 `type_map.raw`、`type.raw`、`box.raw`、`coord.raw`、
 `energy.raw`、`force.raw`、`force_mag.raw`、`spin.raw`、`virial.raw`，
-并在 `out/set/` 写入相应 `.npy`。`energy.npy` 为一维逐帧数组，
+并在 `out/set.000/` 写入相应 `.npy`。`energy.npy` 为一维逐帧数组，
 其他 `.npy` 为二维逐帧数组。raw 与 extxyz 均保留。
 已有 `04.data` 不会被覆盖，重跑前应先检查并处理该目录。
 若 Stage 5 在远端转换任务提交后中断，当前版本不会自动恢复原提交；

@@ -1,5 +1,7 @@
 # `spin_init` 使用说明
 
+[English](README_EN.md) | 中文
+
 `spin_init` 从已有 POSCAR 出发，生成结构扰动、运行 VASP AIMD、将 XDATCAR 逐帧转为 POSCAR，再为每帧建立非共线磁性计算，最后汇总全部已完成任务并导出 DeepMD 磁性数据。
 
 ```text
@@ -17,7 +19,7 @@ dpgen spin_init PARAM [MACHINE]
 
 ## 1. 安装与运行条件
 
-推荐在目标 Linux 集群的 Python 3.9 环境安装本仓库版本，而不是安装 PyPI 上的上游 `dpgen`：
+推荐在目标 Linux 集群的 Python 3.9 环境安装本仓库版本：
 
 ```bash
 git clone https://github.com/LHCstat/spin_init.git
@@ -25,10 +27,11 @@ cd spin_init
 conda create -n spin_init python=3.9
 conda activate spin_init
 python -m pip install .
+python -m pip install oss2
 dpgen spin_init -h
 ```
 
-提交计算还需要可用的 VASP、计算资源和 DPDispatcher 配置。使用 Bohrium/DPCloudServerContext 时，另安装 `python -m pip install "dpdispatcher[bohrium]"`。Stage 2 和 4 的任务目录使用真实符号链接；正式运行请使用允许创建 symlink 的 Linux 环境。
+提交计算还需要可用的 VASP、计算资源和 DPDispatcher 配置。使用 Bohrium/DPCloudServerContext 时，建议安装包含云端依赖的 `python -m pip install "dpdispatcher[bohrium]"`。Stage 2 和 4 的任务目录使用真实符号链接；正式运行请使用允许创建 symlink 的 Linux 环境。
 
 ## 2. 准备输入文件
 
@@ -78,7 +81,7 @@ MAGMOM = 0 0 2  0 0 0
 M_CONSTR = 0 0 2  0 0 0
 ```
 
-正确的 VASP 标签是 `MAGMOM`，不是 `MAMGOM`。`MAGMOM` 和 `M_CONSTR` 均需为每个原子提供三个笛卡尔分量，初始值相同。程序会为每个磁扰动任务生成独立的 INCAR，并保持这两组磁矩同步。零初始磁矩在扰动后仍为零。若 Stage 4 需要结构或晶格优化，可自行设置 `NSW>0`、`IBRION`、`ISIF`、`EDIFFG`；程序不会强行改为静态计算。优化时会回传 `CONTCAR`，但正常退出不等于确认优化收敛。
+`MAGMOM` 和 `M_CONSTR` 均按 POSCAR 原子顺序为每个原子提供三个笛卡尔分量。若 Stage 4 需要结构或晶格优化，可在模板中设置 `NSW>0`、`IBRION`、`ISIF` 和 `EDIFFG`；优化计算会回传 `CONTCAR`。
 
 ## 3. 编写 `param_spin.json`
 
@@ -109,11 +112,11 @@ M_CONSTR = 0 0 2  0 0 0
 | --- | --- |
 | `stages` | 要执行的阶段，编号 1–5；可仅写 `[5]` 导出已完成的计算 |
 | `from_poscar_path` | 已有 POSCAR 的路径 |
-| `out_dir` | 输出根目录，名称按原值使用，不追加后缀 |
+| `out_dir` | 输出根目录，名称按原值使用，不追加后缀；建议使用新的空目录 |
 | `super_cell` | 三个正整数，例如 `[2, 2, 2]` |
 | `scale` | 正的晶胞缩放因子列表，例如 `[0.98, 1.0, 1.02]` |
 | `pert_numb` | 每个 scale 下的随机扰动结构数；另保留一个未随机扰动的 `000000` |
-| `pert_box`、`pert_atom` | 晶胞与原子位置扰动幅度；结构扰动沿用 `init_bulk` 算法 |
+| `pert_box`、`pert_atom` | 晶胞与原子位置扰动幅度 |
 | `md_incar`、`md_nstep` | AIMD INCAR 和预期步数；若 `NSW` 不同，以 INCAR 的 `NSW` 为准 |
 | `spin_incar` | 一个磁性 INCAR 路径，或多个路径组成的非空列表 |
 | `pert_spin` | 磁矩扰动组列表，每项只能指定一个模式；也可为空列表，只生成 `origin` 基准任务 |
@@ -121,6 +124,8 @@ M_CONSTR = 0 0 2  0 0 0
 | `potcars` | 按 POSCAR 元素顺序排列的 POTCAR 片段路径列表 |
 
 有多个初始磁矩方案时，将 `spin_incar` 写为 `"spin_incar": ["./INCAR.state_1", "./INCAR.state_2"]`。每个模板分别生成一套基准和磁扰动任务，输出中增加 `000-incar`、`001-incar` 层；即使列表只有一个文件，也会有 `000-incar`。使用单个字符串时没有这一层。
+
+程序不会覆盖已有的阶段目录。建议为 `out_dir` 指定新的空目录；如果本次要创建的 `00.scale_pert`、`01.md`、`02.disp`、`03.spin` 或 `04.data` 已存在，程序会明确报错。若只需继续运行已经建立的 Stage 4 任务，请使用 `spin_action="run"`。
 
 ### 五种磁矩扰动模式
 
@@ -237,14 +242,14 @@ run_spin/
     ├── selection.json
     └── scale-1.000/
         ├── data -> 03.spin/scale-1.000/data
-        └── out/{data.extxyz,*.raw,set/*.npy}
+        └── out/{data.extxyz,*.raw,set.000/*.npy}
 ```
 
 `01.md` 和 `03.spin` task 的 POSCAR/POTCAR 是真实相对 symlink，不是普通副本。`03.spin` 的磁扰动任务与 `origin/` 同级分组，例如 `000-canting/C1/`；多个 `spin_incar` 时，在 `00/` 与各组之间增加 `000-incar/` 等层。目录中的 `OUTCAR`、`XDATCAR`、`OSZICAR` 只有计算完成且回传后才存在。
 
 新建 Stage 4 使用“编号在前”的目录名。`spin_action="run"` 仍可读取旧清单中的 `incar-000` 和 `Rotation-000` 等目录，但不会自动重命名或搬移已有任务。
 
-Stage 5 不再进行 RMSE 筛选。它确认 `tasks.json` 中所有磁性任务正常完成后，将全部 OUTCAR/OSZICAR 按 scale 连续编号并送入转换；`selection.json` 保留来源 task、scale 和编号，`rejected` 固定为空。`convert-data` 生成 `out/data.extxyz`，随后 `out2npy` 一步生成并保留 raw 和 `set/*.npy`（`energy.npy` 为一维）。
+Stage 5 不进行 RMSE 筛选。它确认 `tasks.json` 中所有磁性任务正常完成后，将全部 OUTCAR/OSZICAR 按 scale 连续编号并送入转换；`selection.json` 保留来源 task、scale 和编号，`rejected` 固定为空。`convert-data` 生成 `out/data.extxyz`，随后 `out2npy` 一步生成并保留 raw 和 `set.000/*.npy`（`energy.npy` 为一维）。
 
 详细编号、单/多 INCAR 目录差异、文件来源及 Stage 5 文件树见 [输出目录结构详解](SPIN_INIT_OUTPUT_STRUCTURE.md)。
 
@@ -252,7 +257,8 @@ Stage 5 不再进行 RMSE 筛选。它确认 `tasks.json` 中所有磁性任务�
 
 - `dpgen spin_init` 不被识别：确认在当前环境安装的是本仓库，并运行 `python -m pip show dpgen` 检查安装位置。
 - 导入时提示 `numpy.dtype size changed`：当前 NumPy 与 h5py 二进制版本不兼容；在同一个环境中安装相容版本。
-- Bohrium 上传时报 `name 'oss2' is not defined`：安装 `dpdispatcher[bohrium]`。
+- Bohrium 上传时报 `name 'oss2' is not defined`：在运行环境中执行 `python -m pip install oss2`；也可安装 `dpdispatcher[bohrium]` 补齐 Bohrium 相关依赖。
+- 创建阶段目录时报已存在：为 `out_dir` 使用新的空目录，或只运行无需重新创建该目录的后续操作。
 - Stage 3 报缺少 XDATCAR：先确认 VASP 在计算节点生成了 XDATCAR，以及 DPDispatcher 是否把它回传到对应 `01.md` task。
 - Stage 4 报磁矩数量不符：检查 POSCAR 原子数，以及 `MAGMOM` 和 `M_CONSTR` 的 `3 × 原子数` 个分量。
 - Linux 之外出现 `WinError 1314`：这是 Windows 符号链接权限限制，不能通过把 POSCAR/POTCAR 改为 copy 来规避设计要求。

@@ -1,5 +1,7 @@
 # `spin_init` 输出目录结构详解
 
+[English](SPIN_INIT_OUTPUT_STRUCTURE_EN.md) | 中文
+
 本文说明 `dpgen spin_init` 生成的全部阶段目录、编号规则、文件来源以及各阶段之间的依赖关系。
 
 以下示例假设参数文件包含：
@@ -584,7 +586,7 @@ run_spin/
             ├── type.raw、type_map.raw
             ├── box.raw、coord.raw、energy.raw、force.raw
             ├── force_mag.raw、spin.raw、virial.raw
-            └── set/{box,coord,energy,force,force_mag,spin,virial}.npy
+            └── set.000/{box,coord,energy,force,force_mag,spin,virial}.npy
 ```
 
 ## 8. 数量关系
@@ -715,11 +717,11 @@ OSZICAR
 ```bash
 python -m json.tool run_spin/04.data/selection.json
 find run_spin/04.data -path '*/out/data.extxyz' -type f
-find run_spin/04.data -path '*/out/set/spin.npy' -type f
+find run_spin/04.data -path '*/out/set.000/spin.npy' -type f
 ```
 
 `selection.json` 的 `selected` 包含全部已完成 task，`rejected` 固定为空；
-每个 scale 下的 `out/set/*.npy` 应具有相同的第一维；`energy.npy` 为一维。
+每个 scale 下的 `out/set.000/*.npy` 应具有相同的第一维；`energy.npy` 为一维。
 
 ## 11. 重要说明
 
@@ -784,7 +786,7 @@ Stage 5 可单独以 `"stages": [5]` 运行，但需要 MACHINE 中的 `convert-
         ├── type_map.raw、type.raw
         ├── box.raw、coord.raw、energy.raw、force.raw
         ├── force_mag.raw、spin.raw、virial.raw
-        └── set/
+        └── set.000/
             ├── box.npy、coord.npy、energy.npy、force.npy
             └── force_mag.npy、spin.npy、virial.npy
 ```
@@ -792,7 +794,7 @@ Stage 5 可单独以 `"stages": [5]` 运行，但需要 MACHINE 中的 `convert-
 `convert-data` 在各 scale 的 `data/` 输入上运行。`nequip-data` 必须是 command 的
 最后一条简单命令，command 必须为不含 shell 注释的单行命令；程序自动
 创建远端 `out/` 并补齐缺少的 `-p data -o out/data.extxyz`，然后回传该文件；
-`out2npy` 一步产生同目录的 raw 与 `set/*.npy`。每个 raw 数值文件每帧一行；
+`out2npy` 一步产生同目录的 raw 与 `set.000/*.npy`。每个 raw 数值文件每帧一行；
 `energy.npy` 是形状为 `(帧数,)` 的一维数组。`spin` 由
 `spin_length × initial_magmoms` 得到，`force_mag` 对应
 `spin_forces_vert`，`virial = -体积 × stress`。
